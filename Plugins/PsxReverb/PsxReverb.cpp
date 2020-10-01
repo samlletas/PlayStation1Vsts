@@ -4,13 +4,13 @@
 #include "IPlug_include_in_plug_src.h"
 #include "SpuReverbPresets.h"
 
-// How many reverb presets there are
-static constexpr int kNumPresets = 10;
+static constexpr int        kNumPresets = 10;           // How many reverb presets there are
+static constexpr uint32_t   kSpuRamSize = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Initializes the reverb plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
-PsxReverb::PsxReverb(const InstanceInfo& info)
+PsxReverb::PsxReverb(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 #if IPLUG_DSP
     , mSpu()
@@ -20,10 +20,12 @@ PsxReverb::PsxReverb(const InstanceInfo& info)
 {
     DefinePluginParams();
     DefinePluginPresets();
-
+    
     #if IPLUG_DSP
         DoDspSetup();
     #endif
+
+    RestorePreset(0);   // Switch to the default preset
 
     #if IPLUG_EDITOR
         DoEditorSetup();
@@ -50,7 +52,7 @@ static double sampleInt16ToDouble(const int16_t origSample) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Does the work of the reverb effect plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) {
+void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept {
     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
 
     // Process the requested number of samples
@@ -86,41 +88,49 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::DefinePluginParams() noexcept {
-    GetParam(kVolLIn)->InitInt("volLIn", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolRIn)->InitInt("volRIn", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolIIR)->InitInt("volIIR", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolWall)->InitInt("volWall", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolAPF1)->InitInt("volAPF1", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolAPF2)->InitInt("volAPF2", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolComb1)->InitInt("volComb1", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolComb2)->InitInt("volComb2", 0, INT16_MIN, INT16_MAX, "Volume");
+    GetParam(kMasterVolL)->InitInt("masterVolL", 0, 0, 0x3FFF);
+    GetParam(kMasterVolR)->InitInt("masterVolR", 0, 0, 0x3FFF);
+    GetParam(kInputVolL)->InitInt("inputVolL", 0, 0, 0x7FFF);
+    GetParam(kInputVolR)->InitInt("inputVolR", 0, 0, 0x7FFF);
+    GetParam(kReverbVolL)->InitInt("reverbVolL", 0, 0, 0x7FFF);
+    GetParam(kReverbVolR)->InitInt("reverbVolR", 0, 0, 0x7FFF);
 
-    GetParam(kVolComb3)->InitInt("volComb3", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kVolComb4)->InitInt("volComb4", 0, INT16_MIN, INT16_MAX, "Volume");
-    GetParam(kDispAPF1)->InitInt("dispAPF1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kDispAPF2)->InitInt("dispAPF2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLAPF1)->InitInt("addrLAPF1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRAPF1)->InitInt("addrRAPF1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLAPF2)->InitInt("addrLAPF2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRAPF2)->InitInt("addrRAPF2", 0, 0, UINT16_MAX, "Offset");
+    GetParam(kWABaseAddr)->InitInt("revBaseAddr", 0, 0, UINT16_MAX);
+    GetParam(kVolLIn)->InitInt("volLIn", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolRIn)->InitInt("volRIn", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolIIR)->InitInt("volIIR", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolWall)->InitInt("volWall", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolAPF1)->InitInt("volAPF1", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolAPF2)->InitInt("volAPF2", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolComb1)->InitInt("volComb1", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolComb2)->InitInt("volComb2", 0, INT16_MIN, INT16_MAX);
 
-    GetParam(kAddrLComb1)->InitInt("addrLComb1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRComb1)->InitInt("addrRComb1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLComb2)->InitInt("addrLComb2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRComb2)->InitInt("addrRComb2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLComb3)->InitInt("addrLComb3", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRComb3)->InitInt("addrRComb3", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLComb4)->InitInt("addrLComb4", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRComb4)->InitInt("addrRComb4", 0, 0, UINT16_MAX, "Offset");
+    GetParam(kVolComb3)->InitInt("volComb3", 0, INT16_MIN, INT16_MAX);
+    GetParam(kVolComb4)->InitInt("volComb4", 0, INT16_MIN, INT16_MAX);
+    GetParam(kDispAPF1)->InitInt("dispAPF1", 0, 0, UINT16_MAX);
+    GetParam(kDispAPF2)->InitInt("dispAPF2", 0, 0, UINT16_MAX);
+    GetParam(kAddrLAPF1)->InitInt("addrLAPF1", 0, 0, UINT16_MAX);
+    GetParam(kAddrRAPF1)->InitInt("addrRAPF1", 0, 0, UINT16_MAX);
+    GetParam(kAddrLAPF2)->InitInt("addrLAPF2", 0, 0, UINT16_MAX);
+    GetParam(kAddrRAPF2)->InitInt("addrRAPF2", 0, 0, UINT16_MAX);
 
-    GetParam(kAddrLSame1)->InitInt("addrLSame1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRSame1)->InitInt("addrRSame1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLSame2)->InitInt("addrLSame2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRSame2)->InitInt("addrRSame2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLDiff1)->InitInt("addrLDiff1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRDiff1)->InitInt("addrRDiff1", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrLDiff2)->InitInt("addrLDiff2", 0, 0, UINT16_MAX, "Offset");
-    GetParam(kAddrRDiff2)->InitInt("addrRDiff2", 0, 0, UINT16_MAX, "Offset");
+    GetParam(kAddrLComb1)->InitInt("addrLComb1", 0, 0, UINT16_MAX);
+    GetParam(kAddrRComb1)->InitInt("addrRComb1", 0, 0, UINT16_MAX);
+    GetParam(kAddrLComb2)->InitInt("addrLComb2", 0, 0, UINT16_MAX);
+    GetParam(kAddrRComb2)->InitInt("addrRComb2", 0, 0, UINT16_MAX);
+    GetParam(kAddrLComb3)->InitInt("addrLComb3", 0, 0, UINT16_MAX);
+    GetParam(kAddrRComb3)->InitInt("addrRComb3", 0, 0, UINT16_MAX);
+    GetParam(kAddrLComb4)->InitInt("addrLComb4", 0, 0, UINT16_MAX);
+    GetParam(kAddrRComb4)->InitInt("addrRComb4", 0, 0, UINT16_MAX);
+
+    GetParam(kAddrLSame1)->InitInt("addrLSame1", 0, 0, UINT16_MAX);
+    GetParam(kAddrRSame1)->InitInt("addrRSame1", 0, 0, UINT16_MAX);
+    GetParam(kAddrLSame2)->InitInt("addrLSame2", 0, 0, UINT16_MAX);
+    GetParam(kAddrRSame2)->InitInt("addrRSame2", 0, 0, UINT16_MAX);
+    GetParam(kAddrLDiff1)->InitInt("addrLDiff1", 0, 0, UINT16_MAX);
+    GetParam(kAddrRDiff1)->InitInt("addrRDiff1", 0, 0, UINT16_MAX);
+    GetParam(kAddrLDiff2)->InitInt("addrLDiff2", 0, 0, UINT16_MAX);
+    GetParam(kAddrRDiff2)->InitInt("addrRDiff2", 0, 0, UINT16_MAX);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -137,6 +147,13 @@ void PsxReverb::DefinePluginPresets() noexcept {
 
         MakePreset(
             presetName,
+            0x3FFFu,                  // masterVolL
+            0x3FFFu,                  // masterVolR
+            0x7FFFu,                  // inputVolL
+            0x7FFFu,                  // inputVolR
+            (i != 0) ? 0x2FFFu : 0,   // reverbVolL
+            (i != 0) ? 0x2FFFu : 0,   // reverbVolR
+            (i != 0) ? workAreaBaseAddr : 0xFFFFu,
             reverbDef.apfOffset1,
             reverbDef.apfOffset2,
             (int16_t) reverbDef.reflectionVolume1,
@@ -178,7 +195,7 @@ void PsxReverb::DefinePluginPresets() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Setup controls for the plugin's GUI
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::DoEditorSetup() {
+void PsxReverb::DoEditorSetup() noexcept {
     mMakeGraphicsFunc = [&]() {
         return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
     };
@@ -188,43 +205,81 @@ void PsxReverb::DoEditorSetup() {
         pGraphics->AttachPanelBackground(COLOR_GRAY);
         pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
-        pGraphics->AttachControl(new IVBakedPresetManagerControl(IRECT(0.0f, 0.0f, 600.0f, 40.0f), DEFAULT_STYLE));
+        IVBakedPresetManagerControl* const pPresetMgrCtrl = new IVBakedPresetManagerControl(IRECT(0.0f, 0.0f, 600.0f, 40.0f), DEFAULT_STYLE);
+        pGraphics->AttachControl(pPresetMgrCtrl);
+        pPresetMgrCtrl->RestorePreset(this, 0);     // Make sure it starts on the default preset
 
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f,  50.0f, 190.0f,  90.0f), kVolLIn,      "In L-Vol",       DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 100.0f, 190.0f, 140.0f), kVolRIn,      "In R-Vol",       DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 150.0f, 190.0f, 190.0f), kVolIIR,      "Refl Vol 1",     DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 200.0f, 190.0f, 240.0f), kVolWall,     "Refl Vol 2",     DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 250.0f, 190.0f, 290.0f), kVolAPF1,     "APF Vol 1",      DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 300.0f, 190.0f, 340.0f), kVolAPF2,     "APF Vol 2",      DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 350.0f, 190.0f, 390.0f), kVolComb1,    "Comb Vol 1",     DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT( 10.0f, 400.0f, 190.0f, 440.0f), kVolComb2,    "Comb Vol 2",     DEFAULT_STYLE, true, EDirection::Horizontal));
+        const auto addHSlider = [=](const int ctrlTag, const char* const label, const float x, const float y, const float w, const float h) noexcept {
+            igraphics::IVStyle style = DEFAULT_STYLE;
+            style.showValue = false;
+            style.labelText.mAlign = igraphics::EAlign::Near;
+            pGraphics->AttachControl(new IVSliderControl(IRECT(x, y, x + w, y + h), ctrlTag, label, style, false, EDirection::Horizontal));
+        };
 
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f,  50.0f, 390.0f,  90.0f), kVolComb3,    "Comb Vol 3",     DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 100.0f, 390.0f, 140.0f), kVolComb4,    "Comb Vol 4",     DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 150.0f, 390.0f, 190.0f), kDispAPF1,    "APF Offset 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 200.0f, 390.0f, 240.0f), kDispAPF2,    "APF Offset 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 250.0f, 390.0f, 290.0f), kAddrLAPF1,   "APF L-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 300.0f, 390.0f, 340.0f), kAddrRAPF1,   "APF R-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 350.0f, 390.0f, 390.0f), kAddrLAPF2,   "APF L-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(200.0f, 400.0f, 390.0f, 440.0f), kAddrRAPF2,   "APF R-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
+        const auto addTInput = [=](const int ctrlTag, const float x, const float y, const float w, const float h) noexcept {
+            IColor bgColor(255, 255, 255, 255);
+            pGraphics->AttachControl(new ICaptionControl(IRECT(x, y, x + w, y + h), ctrlTag, DEFAULT_TEXT, bgColor));
+        };
 
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f,  50.0f, 590.0f,  90.0f), kAddrLComb1,  "Comb L-Addr 1",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 100.0f, 590.0f, 140.0f), kAddrRComb1,  "Comb R-Addr 1",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 150.0f, 590.0f, 190.0f), kAddrLComb2,  "Comb L-Addr 2",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 200.0f, 590.0f, 240.0f), kAddrRComb2,  "Comb R-Addr 2",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 250.0f, 590.0f, 290.0f), kAddrLComb3,  "Comb L-Addr 3",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 300.0f, 590.0f, 340.0f), kAddrRComb3,  "Comb R-Addr 3",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 350.0f, 590.0f, 390.0f), kAddrLComb4,  "Comb L-Addr 4",  DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(400.0f, 400.0f, 590.0f, 440.0f), kAddrRComb4,  "Comb R-Addr 4",  DEFAULT_STYLE, true, EDirection::Horizontal));
+        addHSlider(kReverbVolL, "Reverb L-Vol",   10,   50, 130, 40);   addTInput(kReverbVolL,  145,  70, 45, 20);
+        addHSlider(kReverbVolR, "Reverb R-Vol",   10,   90, 130, 40);   addTInput(kReverbVolR,  145, 110, 45, 20);
+        addHSlider(kInputVolL,  "Input L-Vol",    205,  50, 130, 40);   addTInput(kInputVolL,   340,  70, 45, 20);
+        addHSlider(kInputVolR,  "Input R-Vol",    205,  90, 130, 40);   addTInput(kInputVolR,   340, 110, 45, 20);
+        addHSlider(kMasterVolL, "Master L-Vol",   400,  50, 130, 40);   addTInput(kMasterVolL,  535,  70, 45, 20);
+        addHSlider(kMasterVolR, "Master R-Vol",   400,  90, 130, 40);   addTInput(kMasterVolR,  535, 110, 45, 20);
 
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f,  50.0f, 790.0f,  90.0f), kAddrLSame1,  "SSR L-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 100.0f, 790.0f, 140.0f), kAddrRSame1,  "SSR R-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 150.0f, 790.0f, 190.0f), kAddrLSame2,  "SSR L-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 200.0f, 790.0f, 240.0f), kAddrRSame2,  "SSR R-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 250.0f, 790.0f, 290.0f), kAddrLDiff1,  "DSR L-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 300.0f, 790.0f, 340.0f), kAddrRDiff1,  "DSR R-Addr 1",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 350.0f, 790.0f, 390.0f), kAddrLDiff2,  "DSR L-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
-        pGraphics->AttachControl(new IVSliderControl(IRECT(600.0f, 400.0f, 790.0f, 440.0f), kAddrRDiff2,  "DSR R-Addr 2",   DEFAULT_STYLE, true, EDirection::Horizontal));
+        pGraphics->AttachControl(
+            new IVButtonControl(
+                IRECT(600, 80, 800, 110),
+                [this](IControl* pCaller){
+                    ClearReverbWorkArea();
+                    pCaller->OnEndAnimation();
+                },
+                "Clear Rev. Work Area",
+                DEFAULT_STYLE,
+                true,
+                false
+            )
+        );
+
+        pGraphics->AttachControl(new ITextControl(IRECT(0, 150, PLUG_WIDTH, 164), "- Advanced Settings -", DEFAULT_TEXT, COLOR_MID_GRAY));
+
+        addHSlider(kWABaseAddr, "WA Base Addr",    10, 180, 130, 40);   addTInput(kWABaseAddr,  145, 200, 45, 20);
+        addHSlider(kVolLIn,     "In L-Vol",        10, 220, 130, 40);   addTInput(kVolLIn,      145, 240, 45, 20);
+        addHSlider(kVolRIn,     "In R-Vol",        10, 260, 130, 40);   addTInput(kVolRIn,      145, 280, 45, 20);
+        addHSlider(kVolIIR,     "Refl Vol 1",      10, 300, 130, 40);   addTInput(kVolIIR,      145, 320, 45, 20);
+        addHSlider(kVolWall,    "Refl Vol 2",      10, 340, 130, 40);   addTInput(kVolWall,     145, 360, 45, 20);
+        addHSlider(kVolAPF1,    "APF Vol 1",       10, 380, 130, 40);   addTInput(kVolAPF1,     145, 400, 45, 20);
+        addHSlider(kVolAPF2,    "APF Vol 2",       10, 420, 130, 40);   addTInput(kVolAPF2,     145, 440, 45, 20);
+        addHSlider(kVolComb1,   "Comb Vol 1",      10, 460, 130, 40);   addTInput(kVolComb1,    145, 480, 45, 20);
+        addHSlider(kVolComb2,   "Comb Vol 2",      10, 500, 130, 40);   addTInput(kVolComb2,    145, 520, 45, 20);
+
+        addHSlider(kVolComb3,   "Comb Vol 3",     205, 220, 130, 40);   addTInput(kVolComb3,    340, 240, 45, 20);
+        addHSlider(kVolComb4,   "Comb Vol 4",     205, 260, 130, 40);   addTInput(kVolComb4,    340, 280, 45, 20);
+        addHSlider(kDispAPF1,   "APF Offset 1",   205, 300, 130, 40);   addTInput(kDispAPF1,    340, 320, 45, 20);
+        addHSlider(kDispAPF2,   "APF Offset 2",   205, 340, 130, 40);   addTInput(kDispAPF2,    340, 360, 45, 20);
+        addHSlider(kAddrLAPF1,  "APF L-Addr 1",   205, 380, 130, 40);   addTInput(kAddrLAPF1,   340, 400, 45, 20);
+        addHSlider(kAddrRAPF1,  "APF R-Addr 1",   205, 420, 130, 40);   addTInput(kAddrRAPF1,   340, 440, 45, 20);
+        addHSlider(kAddrLAPF2,  "APF L-Addr 2",   205, 460, 130, 40);   addTInput(kAddrLAPF2,   340, 480, 45, 20);
+        addHSlider(kAddrRAPF2,  "APF R-Addr 2",   205, 500, 130, 40);   addTInput(kAddrRAPF2,   340, 520, 45, 20);
+
+        addHSlider(kAddrLComb1, "Comb L-Addr 1",  400, 220, 130, 40);   addTInput(kAddrLComb1,  535, 240, 45, 20);
+        addHSlider(kAddrRComb1, "Comb R-Addr 1",  400, 260, 130, 40);   addTInput(kAddrRComb1,  535, 280, 45, 20);
+        addHSlider(kAddrLComb2, "Comb L-Addr 2",  400, 300, 130, 40);   addTInput(kAddrLComb2,  535, 320, 45, 20);
+        addHSlider(kAddrRComb2, "Comb R-Addr 2",  400, 340, 130, 40);   addTInput(kAddrRComb2,  535, 360, 45, 20);
+        addHSlider(kAddrLComb3, "Comb L-Addr 3",  400, 380, 130, 40);   addTInput(kAddrLComb3,  535, 400, 45, 20);
+        addHSlider(kAddrRComb3, "Comb R-Addr 3",  400, 420, 130, 40);   addTInput(kAddrRComb3,  535, 440, 45, 20);
+        addHSlider(kAddrLComb4, "Comb L-Addr 4",  400, 460, 130, 40);   addTInput(kAddrLComb4,  535, 480, 45, 20);
+        addHSlider(kAddrRComb4, "Comb R-Addr 4",  400, 500, 130, 40);   addTInput(kAddrRComb4,  535, 520, 45, 20);
+
+        addHSlider(kAddrLSame1, "SSR L-Addr 1",   595, 220, 130, 40);   addTInput(kAddrLSame1,  730, 240, 45, 20);
+        addHSlider(kAddrRSame1, "SSR R-Addr 1",   595, 260, 130, 40);   addTInput(kAddrRSame1,  730, 280, 45, 20);
+        addHSlider(kAddrLSame2, "SSR L-Addr 2",   595, 300, 130, 40);   addTInput(kAddrLSame2,  730, 320, 45, 20);
+        addHSlider(kAddrRSame2, "SSR R-Addr 2",   595, 340, 130, 40);   addTInput(kAddrRSame2,  730, 360, 45, 20);
+        addHSlider(kAddrLDiff1, "DSR L-Addr 1",   595, 380, 130, 40);   addTInput(kAddrLDiff1,  730, 400, 45, 20);
+        addHSlider(kAddrRDiff1, "DSR R-Addr 1",   595, 420, 130, 40);   addTInput(kAddrRDiff1,  730, 440, 45, 20);
+        addHSlider(kAddrLDiff2, "DSR L-Addr 2",   595, 460, 130, 40);   addTInput(kAddrLDiff2,  730, 480, 45, 20);
+        addHSlider(kAddrRDiff2, "DSR R-Addr 2",   595, 500, 130, 40);   addTInput(kAddrRDiff2,  730, 520, 45, 20);
     };
 }
 
@@ -244,17 +299,17 @@ Spu::StereoSample PsxReverb::SpuWantsASampleCallback(void* pUserData) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Setup DSP related stuff
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::DoDspSetup() {
+void PsxReverb::DoDspSetup() noexcept {
     // Create the PlayStation SPU core with the standard 512 KiB RAM but NO voices (since we are not playing any samples)
-    Spu::initCore(mSpu, 1024 * 512, 0);
+    Spu::initCore(mSpu, kSpuRamSize, 0);
 
-    // Set volume levels
+    // Set default volume levels
     mSpu.masterVol.left = 0x3FFF;
     mSpu.masterVol.right = 0x3FFF;
-    mSpu.reverbVol.left = 0x3FFF;
-    mSpu.reverbVol.right = 0x3FFF;
-    mSpu.extInputVol.left = 0x3FFF;
-    mSpu.extInputVol.right = 0x3FFF;
+    mSpu.reverbVol.left = 0x2FFF;
+    mSpu.reverbVol.right = 0x2FFF;
+    mSpu.extInputVol.left = 0x7FFF;
+    mSpu.extInputVol.right = 0x7FFF;
 
     // Setup other SPU settings
     mSpu.bUnmute = true;
@@ -275,25 +330,37 @@ void PsxReverb::DoDspSetup() {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Called when a parameter changes
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unused]] double normalizedValue) {
-    UpdateSpuReverbRegisters();
+void PsxReverb::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unused]] double normalizedValue) noexcept {
+    UpdateSpuRegistersFromParams();
+
+    // If changing the work area base address then clear it
+    if (idx == kWABaseAddr) {
+        ClearReverbWorkArea();
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Called when a preset changes
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::OnRestoreState() {
+void PsxReverb::OnRestoreState() noexcept {
     Plugin::OnRestoreState();
-    UpdateSpuReverbRegisters();
+    UpdateSpuRegistersFromParams();
+    ClearReverbWorkArea();  // When switching patches stop the current reverb effect
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-// Upates the value of the PlayStation SPUs reverb registers
+// Upates the value of the PlayStation SPUs reverb registers which are bound to certain parameters
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxReverb::UpdateSpuReverbRegisters() {
+void PsxReverb::UpdateSpuRegistersFromParams() noexcept {
     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
 
-    // Update the registers
+    mSpu.masterVol.left           = (int16_t) GetParam(kMasterVolL)->Value();
+    mSpu.masterVol.right          = (int16_t) GetParam(kMasterVolR)->Value();
+    mSpu.extInputVol.left         = (int16_t) GetParam(kInputVolL)->Value();
+    mSpu.extInputVol.right        = (int16_t) GetParam(kInputVolR)->Value();
+    mSpu.reverbVol.left           = (int16_t) GetParam(kReverbVolL)->Value();
+    mSpu.reverbVol.right          = (int16_t) GetParam(kReverbVolR)->Value();
+    mSpu.reverbBaseAddr8          = (uint16_t) GetParam(kWABaseAddr)->Value();
     mSpu.reverbRegs.dispAPF1      = (uint16_t) GetParam(kDispAPF1)->Value();
     mSpu.reverbRegs.dispAPF2      = (uint16_t) GetParam(kDispAPF2)->Value();
     mSpu.reverbRegs.volIIR        = (int16_t) GetParam(kVolIIR)->Value();
@@ -326,40 +393,13 @@ void PsxReverb::UpdateSpuReverbRegisters() {
     mSpu.reverbRegs.addrRAPF2     = (uint16_t) GetParam(kAddrRAPF2)->Value();
     mSpu.reverbRegs.volLIn        = (int16_t) GetParam(kVolLIn)->Value();
     mSpu.reverbRegs.volRIn        = (int16_t) GetParam(kVolRIn)->Value();
+}
 
-    // Determine the reverb base address: doing this the way the PsyQ SDK did it.
-    //  (1) Figure out the max displacement or offset of all reverb address variables (in multiples of 8 bytes).
-    //  (2) Subtract from the end SPU memory address (in multiples of 8 bytes) of 0x10000
-    //  (3) Subtract a further '2' units (16 bytes) to get the base addresss.
-    //
-    uint32_t maxAddrDisp8 = std::max<uint32_t>(mSpu.reverbRegs.dispAPF1, mSpu.reverbRegs.dispAPF2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLSame1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRSame1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLComb1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRComb1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLComb2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRComb2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLSame2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRSame2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLDiff1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRDiff1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLComb3);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRComb3);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLComb4);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRComb4);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLDiff2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRDiff2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLAPF1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRAPF1);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrLAPF2);
-    maxAddrDisp8 = std::max<uint32_t>(maxAddrDisp8, mSpu.reverbRegs.addrRAPF2);
-    maxAddrDisp8 += 2;
-    maxAddrDisp8 = std::min<uint32_t>(maxAddrDisp8, 0x10000u);
-
-    // Set the reverb base address
-    mSpu.reverbBaseAddr8 = 0x10000u - maxAddrDisp8;
-
-    // Clear the reverb working area while we are at this also: this will stop any reverb effect in flight
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Clears the work area for the current reverb effect, effectively silencing the current reverb
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::ClearReverbWorkArea() noexcept {
+    // Just clear the entire SPU ram...
     std::memset(mSpu.pRam, 0, 512 * 1024);
 }
 

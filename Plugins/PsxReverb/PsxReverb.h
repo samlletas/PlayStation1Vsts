@@ -13,6 +13,13 @@ using namespace igraphics;
 // The registers define the reverb settings and how the reverb is processed.
 //------------------------------------------------------------------------------------------------------------------------------------------
 enum EParams {
+    kMasterVolL,    // Spu master volume multiplier - left
+    kMasterVolR,    // Spu master volume multiplier - right
+    kInputVolL,     // Spu input volume multiplier - left
+    kInputVolR,     // Spu input volume multiplier - right
+    kReverbVolL,    // Reverb volume/depth multiplier - left
+    kReverbVolR,    // Reverb volume/depth multiplier - right
+    kWABaseAddr,    // Reverb work area base address (in multiples of '8') - any point past this in SPU RAM is used for the reverb effect
     kDispAPF1,      // Reverb APF Offset 1
     kDispAPF2,      // Reverb APF Offset 2
     kVolIIR,        // Reverb Reflection Volume 1
@@ -54,10 +61,10 @@ enum EParams {
 class PsxReverb final : public Plugin
 {
 public:
-    PsxReverb(const InstanceInfo& info);
+    PsxReverb(const InstanceInfo& info) noexcept;
 
     #if IPLUG_DSP
-        void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) override;
+        void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
     #endif
 
 private:
@@ -65,15 +72,16 @@ private:
     void DefinePluginPresets() noexcept;
 
     #if IPLUG_EDITOR
-        void DoEditorSetup();
+        void DoEditorSetup() noexcept;
     #endif
 
     #if IPLUG_DSP
         static Spu::StereoSample SpuWantsASampleCallback(void* pUserData) noexcept;
-        void DoDspSetup();
-        virtual void InformHostOfParamChange(int idx, double normalizedValue) override;
-        virtual void OnRestoreState() override;
-        void UpdateSpuReverbRegisters();
+        void DoDspSetup() noexcept;
+        virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
+        virtual void OnRestoreState() noexcept override;
+        void UpdateSpuRegistersFromParams() noexcept;
+        void ClearReverbWorkArea() noexcept;
 
         Spu::Core               mSpu;
         std::recursive_mutex    mSpuMutex;
