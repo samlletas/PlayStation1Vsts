@@ -25,8 +25,6 @@ PsxReverb::PsxReverb(const InstanceInfo& info) noexcept
         DoDspSetup();
     #endif
 
-    RestorePreset(0);   // Switch to the default preset
-
     #if IPLUG_EDITOR
         DoEditorSetup();
     #endif
@@ -207,7 +205,6 @@ void PsxReverb::DoEditorSetup() noexcept {
 
         IVBakedPresetManagerControl* const pPresetMgrCtrl = new IVBakedPresetManagerControl(IRECT(0.0f, 0.0f, 600.0f, 40.0f), DEFAULT_STYLE);
         pGraphics->AttachControl(pPresetMgrCtrl);
-        pPresetMgrCtrl->RestorePreset(this, 0);     // Make sure it starts on the default preset
 
         const auto addHSlider = [=](const int ctrlTag, const char* const label, const float x, const float y, const float w, const float h) noexcept {
             igraphics::IVStyle style = DEFAULT_STYLE;
