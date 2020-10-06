@@ -8,7 +8,7 @@
 
 const int kNumPresets = 1;
 
-enum EParams {
+enum EParams : uint32_t {
     kParamGain = 0,
     kParamNoteGlideTime,
     kParamAttack,
@@ -28,9 +28,8 @@ enum EParams {
     #include "PsxSampler_DSP.h"
 #endif
 
-enum EControlTags {
+enum EControlTags : uint32_t {
     kCtrlTagMeter = 0,
-    kCtrlTagLFOVis,
     kCtrlTagScope,
     kCtrlTagRTText,
     kCtrlTagKeyboard,
@@ -46,25 +45,26 @@ public:
     PsxSampler(const InstanceInfo& info) noexcept;
 
     #if IPLUG_DSP
-        void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
-        void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
-        void OnReset() noexcept override;
-        void OnParamChange(int paramIdx) noexcept override;
-        void OnIdle() noexcept override;
-        bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
+        virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
+        virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
+        virtual void OnReset() noexcept override;
+        virtual void OnParamChange(int paramIdx) noexcept override;
+        virtual void OnIdle() noexcept override;
+        virtual bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
     #endif
 
 private:
     #if IPLUG_DSP
         Spu::Core               mSpu;
         std::recursive_mutex    mSpuMutex;
+        uint32_t                mNumSampleBlocks;
         PsxSamplerDSP<sample>   mDSP;
         IPeakSender<2>          mMeterSender;
-        ISender<1>              mLFOVisSender;
 
         void DoDspSetup() noexcept;
         virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
         virtual void OnRestoreState() noexcept override;
         void UpdateSpuRegistersFromParams() noexcept;
+        void AddSampleTerminator() noexcept;
     #endif
 };

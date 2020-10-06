@@ -9,9 +9,9 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
     , mSpu()
     , mSpuMutex()
+    , mNumSampleBlocks(0)
     , mDSP{16}
     , mMeterSender()
-    , mLFOVisSender()
 {
     GetParam(kParamGain)->InitDouble("Gain", 100., 0., 100.0, 0.01, "%");
     GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 30.);
@@ -29,7 +29,7 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
         mMakeGraphicsFunc = [&]() {
             return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
         };
-  
+        
         mLayoutFunc = [&](IGraphics* pGraphics) {
             pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
             pGraphics->AttachPanelBackground(COLOR_GRAY);
@@ -81,7 +81,7 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
                 }
             );
 
-            pGraphics->AttachControl(new IVDisplayControl(lfoPanel.GetGridCell(1, 1, 2, 3).Union(lfoPanel.GetGridCell(1, 2, 2, 3)), "", DEFAULT_STYLE, EDirection::Horizontal, 0.f, 1.f, 0.f, 1024), kCtrlTagLFOVis, "LFO");
+            //pGraphics->AttachControl(new IVDisplayControl(lfoPanel.GetGridCell(1, 1, 2, 3).Union(lfoPanel.GetGridCell(1, 2, 2, 3)), "", DEFAULT_STYLE, EDirection::Horizontal, 0.f, 1.f, 0.f, 1024), kCtrlTagLFOVis, "LFO");
             pGraphics->AttachControl(new IVGroupControl("LFO", "LFO", 10.f, 20.f, 10.f, 10.f));
     
             pGraphics->AttachControl(
@@ -113,12 +113,10 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
 void PsxSampler::ProcessBlock(sample** inputs, sample** outputs, int nFrames) noexcept {
     mDSP.ProcessBlock(nullptr, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
     mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
-    mLFOVisSender.PushData({kCtrlTagLFOVis, {float(mDSP.mLFO.GetLastOutput())}});
 }
 
 void PsxSampler::OnIdle() noexcept {
     mMeterSender.TransmitData(*this);
-    mLFOVisSender.TransmitData(*this);
 }
 
 void PsxSampler::OnReset() noexcept {
@@ -189,6 +187,9 @@ void PsxSampler::DoDspSetup() noexcept {
     mSpu.reverbCurAddr = 0;
     mSpu.processedReverb = {};
     mSpu.reverbRegs = {};
+
+    // Terminate the current sample in SPU RAM
+    AddSampleTerminator();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -205,11 +206,33 @@ void PsxSampler::OnRestoreState() noexcept {
     // TODO...
     Plugin::OnRestoreState();
     UpdateSpuRegistersFromParams();
+    AddSampleTerminator();
 }
 
 void PsxSampler::UpdateSpuRegistersFromParams() noexcept {
     // TODO...
     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Add a terminator for the currently loaded sample consisting of two silent ADPCM blocks which will loop indefinitely.
+// Used to guarantee a sound will stop playing after it reaches the end, since SPU voices technically never stop.
+// The SPU emulation however will kill them to save on CPU time...
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::AddSampleTerminator() noexcept {
+    // Figure out which ADPCM sample block to write the terminators
+    constexpr uint32_t kMaxSampleBlocks = kSpuRamSize / Spu::ADPCM_BLOCK_SIZE;
+    static_assert(kMaxSampleBlocks >= 2);
+    const uint32_t termAdpcmBlocksStartIdx = std::min(mNumSampleBlocks, kMaxSampleBlocks - 2);
+    std::byte* const pTermAdpcmBlocks = mSpu.pRam + (Spu::ADPCM_BLOCK_SIZE * termAdpcmBlocksStartIdx);
+
+    // Zero the bytes for the two ADPCM sample blocks firstly
+    std::memset(pTermAdpcmBlocks, 0, Spu::ADPCM_BLOCK_SIZE * 2);
+
+    // The 2nd byte of each ADPCM block is the flags byte, and is where we indicate loop start/end.
+    // Make the first block be the loop start, and the second block be loop end:
+    pTermAdpcmBlocks[1]   = (std::byte) Spu::ADPCM_FLAG_LOOP_START;
+    pTermAdpcmBlocks[17]  = (std::byte) Spu::ADPCM_FLAG_LOOP_END;
 }
 
 #endif  // #if IPLUG_DSP
