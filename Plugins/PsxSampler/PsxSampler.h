@@ -44,35 +44,25 @@ class PsxSampler final : public Plugin {
 public:
     PsxSampler(const InstanceInfo& info) noexcept;
 
-    #if IPLUG_DSP
-        virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
-        virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
-        virtual void OnReset() noexcept override;
-        virtual void OnParamChange(int paramIdx) noexcept override;
-        virtual void OnIdle() noexcept override;
-        virtual bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
-    #endif
+    virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
+    virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
+    virtual void OnReset() noexcept override;
+    virtual void OnParamChange(int paramIdx) noexcept override;
+    virtual void OnIdle() noexcept override;
+    virtual bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
 
 private:
-    #if IPLUG_DSP
-        Spu::Core               mSpu;
-        std::recursive_mutex    mSpuMutex;
-        uint32_t                mNumSampleBlocks;
-        PsxSamplerDSP<sample>   mDSP;
-        IPeakSender<2>          mMeterSender;
-    #endif
+    Spu::Core               mSpu;
+    std::recursive_mutex    mSpuMutex;
+    uint32_t                mNumSampleBlocks;
+    PsxSamplerDSP<sample>   mDSP;
+    IPeakSender<2>          mMeterSender;
 
     void DefinePluginParams() noexcept;
-
-    #if IPLUG_EDITOR
-        void DoEditorSetup() noexcept;
-    #endif
-
-    #if IPLUG_DSP
-        void DoDspSetup() noexcept;
-        virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
-        virtual void OnRestoreState() noexcept override;
-        void UpdateSpuVoicesFromParams() noexcept;
-        void AddSampleTerminator() noexcept;
-    #endif
+    void DoEditorSetup() noexcept;
+    void DoDspSetup() noexcept;
+    virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
+    virtual void OnRestoreState() noexcept override;
+    void UpdateSpuVoicesFromParams() noexcept;
+    void AddSampleTerminator() noexcept;
 };

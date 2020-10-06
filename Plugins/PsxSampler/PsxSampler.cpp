@@ -14,13 +14,8 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     , mMeterSender()
 {
     DefinePluginParams();
-    
-    #if IPLUG_EDITOR
-        DoEditorSetup();
-    #endif
+    DoEditorSetup();
 }
-
-#if IPLUG_DSP
 
 void PsxSampler::ProcessBlock(sample** inputs, sample** outputs, int nFrames) noexcept {
     mDSP.ProcessBlock(nullptr, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
@@ -68,8 +63,6 @@ bool PsxSampler::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pD
     return false;
 }
 
-#endif  // #if IPLUG_DSP
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -87,8 +80,6 @@ void PsxSampler::DefinePluginParams() noexcept {
     GetParam(kParamLFODepth)->InitPercentage("LFO Depth");
 }
 
-#if IPLUG_EDITOR
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Setup controls for the plugin's GUI
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -96,25 +87,34 @@ void PsxSampler::DoEditorSetup() noexcept {
     mMakeGraphicsFunc = [&]() {
         return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
     };
-        
+
     mLayoutFunc = [&](IGraphics* pGraphics) {
+        // High level GUI setup
         pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
         pGraphics->AttachPanelBackground(COLOR_GRAY);
         pGraphics->EnableMouseOver(true);
         pGraphics->EnableMultiTouch(true);
-
         pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
-        const IRECT b = pGraphics->GetBounds().GetPadded(-20.f);
-        const IRECT lfoPanel = b.GetFromLeft(300.f).GetFromTop(200.f);
-        IRECT keyboardBounds = b.GetFromBottom(300);
-        IRECT wheelsBounds = keyboardBounds.ReduceFromLeft(100.f).GetPadded(-10.f);
+        // Setup the panels
+        const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
+        const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetReducedFromRight(40);
+        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(80).GetReducedFromRight(40);
+        const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(180).GetFromTop(250);
 
-        pGraphics->AttachControl(new IVKeyboardControl(keyboardBounds), kCtrlTagKeyboard);
-        pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5)), kCtrlTagBender);
-        pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5, true), IMidiMsg::EControlChangeMsg::kModWheel));
+        pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
+        pGraphics->AttachControl(new IVGroupControl(bndTrackPanel, "Track"));
+        pGraphics->AttachControl(new IVGroupControl(bndEnvelopePanel, "Envelope"));
 
-        const IRECT controls = b.GetGridCell(1, 2, 2);
+        // Add the test keyboard and pitch bend wheel
+        const IRECT bndKeyboardPanel = bndPadded.GetFromBottom(200);
+        const IRECT bndKeyboard = bndKeyboardPanel.GetReducedFromLeft(60.0f);
+        const IRECT bndPitchWheel = bndKeyboardPanel.GetFromLeft(50.0f);
+
+        pGraphics->AttachControl(new IWheelControl(bndPitchWheel), kCtrlTagBender);
+        pGraphics->AttachControl(new IVKeyboardControl(bndKeyboard), kCtrlTagKeyboard);
+
+        #if false
         pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(0, 2, 6).GetCentredInside(90), kParamGain, "Gain"));
         pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(1, 2, 6).GetCentredInside(90), kParamNoteGlideTime, "Glide"));
 
@@ -123,8 +123,13 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(1, 1, 4).GetMidHPadded(30.), kParamDecay, "Decay"));
         pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(2, 1, 4).GetMidHPadded(30.), kParamSustain, "Sustain"));
         pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(3, 1, 4).GetMidHPadded(30.), kParamRelease, "Release"));
-        pGraphics->AttachControl(new IVLEDMeterControl<2>(controls.GetFromRight(100).GetPadded(-30)), kCtrlTagMeter);
-    
+        #endif
+
+        // Add the volume meter
+        const IRECT bndVolMeter = bndPadded.GetReducedFromTop(10).GetFromRight(30).GetFromTop(160);
+        pGraphics->AttachControl(new IVLEDMeterControl<2>(bndVolMeter), kCtrlTagMeter);
+
+        #if false
         pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateHz, "Rate"), kNoTag, "LFO")->Hide(true);
         pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateTempo, "Rate"), kNoTag, "LFO")->DisablePrompt(false);
         pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 1, 2, 3).GetCentredInside(60), kParamLFODepth, "Depth"), kNoTag, "LFO");
@@ -149,6 +154,7 @@ void PsxSampler::DoEditorSetup() noexcept {
         );
 
         pGraphics->AttachControl(new IVGroupControl("LFO", "LFO", 10.f, 20.f, 10.f, 10.f));
+        #endif
 
         pGraphics->SetQwertyMidiKeyHandlerFunc(
             [pGraphics](const IMidiMsg& msg) noexcept {
@@ -157,10 +163,6 @@ void PsxSampler::DoEditorSetup() noexcept {
         );
     };
 }
-
-#endif  // #if IPLUG_EDITOR
-
-#if IPLUG_DSP
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Setup DSP related stuff
@@ -236,5 +238,3 @@ void PsxSampler::AddSampleTerminator() noexcept {
     pTermAdpcmBlocks[1]   = (std::byte) Spu::ADPCM_FLAG_LOOP_START;
     pTermAdpcmBlocks[17]  = (std::byte) Spu::ADPCM_FLAG_LOOP_END;
 }
-
-#endif  // #if IPLUG_DSP
