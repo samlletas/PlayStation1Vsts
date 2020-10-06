@@ -60,11 +60,19 @@ private:
         uint32_t                mNumSampleBlocks;
         PsxSamplerDSP<sample>   mDSP;
         IPeakSender<2>          mMeterSender;
+    #endif
 
+    void DefinePluginParams() noexcept;
+
+    #if IPLUG_EDITOR
+        void DoEditorSetup() noexcept;
+    #endif
+
+    #if IPLUG_DSP
         void DoDspSetup() noexcept;
         virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
         virtual void OnRestoreState() noexcept override;
-        void UpdateSpuRegistersFromParams() noexcept;
+        void UpdateSpuVoicesFromParams() noexcept;
         void AddSampleTerminator() noexcept;
     #endif
 };

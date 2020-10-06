@@ -67,6 +67,12 @@ public:
     #endif
 
 private:
+    #if IPLUG_DSP
+        Spu::Core               mSpu;
+        std::recursive_mutex    mSpuMutex;
+        Spu::StereoSample       mSpuInputSample;
+    #endif
+
     void DefinePluginParams() noexcept;
     void DefinePluginPresets() noexcept;
 
@@ -81,9 +87,5 @@ private:
         virtual void OnRestoreState() noexcept override;
         void UpdateSpuRegistersFromParams() noexcept;
         void ClearReverbWorkArea() noexcept;
-
-        Spu::Core               mSpu;
-        std::recursive_mutex    mSpuMutex;
-        Spu::StereoSample       mSpuInputSample;
     #endif
 };
