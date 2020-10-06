@@ -12,7 +12,7 @@ using namespace igraphics;
 // These parameters are the reverb registers used by the PlayStation 1.
 // The registers define the reverb settings and how the reverb is processed.
 //------------------------------------------------------------------------------------------------------------------------------------------
-enum EParams {
+enum EParams : uint32_t {
     kMasterVolL,    // Spu master volume multiplier - left
     kMasterVolR,    // Spu master volume multiplier - right
     kInputVolL,     // Spu input volume multiplier - left

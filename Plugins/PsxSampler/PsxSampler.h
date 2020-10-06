@@ -30,8 +30,6 @@ enum EParams : uint32_t {
 
 enum EControlTags : uint32_t {
     kCtrlTagMeter = 0,
-    kCtrlTagScope,
-    kCtrlTagRTText,
     kCtrlTagKeyboard,
     kCtrlTagBender,
     kNumCtrlTags

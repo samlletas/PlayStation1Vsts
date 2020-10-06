@@ -1,9 +1,13 @@
 #include "PsxSampler.h"
+
 #include "IPlug_include_in_plug_src.h"
 #include "LFO.h"
 
 static constexpr uint32_t   kSpuRamSize     = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 static constexpr uint32_t   kSpuNumVoices   = 24;           // Maximum number of SPU voices: this is the hardware limit of the PS1
+
+static constexpr const char* const ICON_FK_SQUARE_O = u8"\uf096";
+static constexpr const char* const ICON_FK_CHECK_SQUARE = u8"\uf14a";
 
 PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -95,6 +99,23 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->EnableMouseOver(true);
         pGraphics->EnableMultiTouch(true);
         pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
+        pGraphics->LoadFont("ForkAwesome", FORK_AWESOME_FN);
+
+        // Styles
+        const IVStyle labelStyle =
+            DEFAULT_STYLE
+            .WithDrawFrame(false)
+            .WithDrawShadows(false)
+            .WithValueText(
+                DEFAULT_TEXT
+                .WithVAlign(EVAlign::Middle)
+                .WithAlign(EAlign::Near)
+                .WithSize(18.0f)
+            );
+        
+        const IText editBoxTextStyle = DEFAULT_TEXT;
+        const IColor editBoxBgColor = IColor(255, 255, 255, 255);
+        const IText forkAwesomeText = { 16.0f, "ForkAwesome" };
 
         // Setup the panels
         const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
@@ -105,6 +126,29 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
         pGraphics->AttachControl(new IVGroupControl(bndTrackPanel, "Track"));
         pGraphics->AttachControl(new IVGroupControl(bndEnvelopePanel, "Envelope"));
+
+        // Sample panel
+        {
+            const IRECT bndPanelPadded = bndSamplePanel.GetReducedFromTop(20.0f);
+            const IRECT bndColLoadSave = bndPanelPadded.GetFromLeft(100.0f);
+            const IRECT bndColSizeRateLabels = bndPanelPadded.GetReducedFromLeft(110.0f).GetFromLeft(100.0f);
+            const IRECT bndColSizeRateValues = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(80.0f).GetPadded(-4.0f);
+            const IRECT bndColBaseNoteLabels = bndPanelPadded.GetReducedFromLeft(300.0f).GetFromLeft(100.0f);
+            const IRECT bndColBaseNoteValues = bndPanelPadded.GetReducedFromLeft(410.0f).GetFromLeft(100.0f).GetPadded(-4.0f);
+            const IRECT bndColLooped = bndPanelPadded.GetReducedFromLeft(520.0f).GetFromLeft(100.0f);
+
+            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromTop(30.0f), SplashClickActionFunc, "Load"));
+            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromBottom(30.0f), SplashClickActionFunc, "Save"));
+            pGraphics->AttachControl(new IVLabelControl(bndColSizeRateLabels.GetFromTop(30.0f), "Num Samples", labelStyle));
+            pGraphics->AttachControl(new IVLabelControl(bndColSizeRateLabels.GetFromBottom(30.0f), "Sample Rate", labelStyle));
+            pGraphics->AttachControl(new ICaptionControl(bndColSizeRateValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColSizeRateValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new IVLabelControl(bndColBaseNoteLabels.GetFromTop(30.0f), "Base Note", labelStyle));
+            pGraphics->AttachControl(new IVLabelControl(bndColBaseNoteLabels.GetFromBottom(30.0f), "Base Note Frac", labelStyle));
+            pGraphics->AttachControl(new ICaptionControl(bndColBaseNoteValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColBaseNoteValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ITextToggleControl(bndColLooped, 0, ICON_FK_SQUARE_O, ICON_FK_CHECK_SQUARE, forkAwesomeText));
+        }
 
         // Add the test keyboard and pitch bend wheel
         const IRECT bndKeyboardPanel = bndPadded.GetFromBottom(200);

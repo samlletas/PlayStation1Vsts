@@ -150,6 +150,7 @@ END
 BEGIN
     "#include ""..\\config.h""\r\n"
     "ROBOTO_FN TTF ROBOTO_FN\0"
+    "FORK_AWESOME_FN TTF FORK_AWESOME_FN\0"
 END
 
 #endif    // APSTUDIO_INVOKED
@@ -230,6 +231,7 @@ END
 //
 #include "..\config.h"
 ROBOTO_FN TTF ROBOTO_FN
+FORK_AWESOME_FN TTF FORK_AWESOME_FN
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
 
