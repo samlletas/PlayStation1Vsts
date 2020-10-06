@@ -297,7 +297,7 @@ Spu::StereoSample PsxReverb::SpuWantsASampleCallback(void* pUserData) noexcept {
 // Setup DSP related stuff
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::DoDspSetup() noexcept {
-    // Create the PlayStation SPU core with the standard 512 KiB RAM but NO voices (since we are not playing any samples)
+    // Create the PlayStation SPU core and do it with NO voices, since we are not playing any samples and just using the reverb FX...
     Spu::initCore(mSpu, kSpuRamSize, 0);
 
     // Set default volume levels

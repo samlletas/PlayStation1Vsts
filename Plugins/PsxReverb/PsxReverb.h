@@ -58,8 +58,7 @@ enum EParams {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Logic for the PlayStation 1 reverb plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
-class PsxReverb final : public Plugin
-{
+class PsxReverb final : public Plugin {
 public:
     PsxReverb(const InstanceInfo& info) noexcept;
 
