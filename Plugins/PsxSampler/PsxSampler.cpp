@@ -5,7 +5,11 @@
 
 static constexpr uint32_t   kSpuRamSize     = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 static constexpr uint32_t   kSpuNumVoices   = 24;           // Maximum number of SPU voices: this is the hardware limit of the PS1
+static constexpr int        kNumPresets     = 1;            // Not doing any actual presets for this instrument
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Initializes the sampler instrument plugin
+//------------------------------------------------------------------------------------------------------------------------------------------
 PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
     , mSpu()
@@ -19,6 +23,7 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
 }
 
 void PsxSampler::ProcessBlock(sample** inputs, sample** outputs, int nFrames) noexcept {
+    // TODO...
     mDSP.ProcessBlock(nullptr, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
     mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
 }
@@ -28,10 +33,12 @@ void PsxSampler::OnIdle() noexcept {
 }
 
 void PsxSampler::OnReset() noexcept {
+    // TODO...
     mDSP.Reset(GetSampleRate(), GetBlockSize());
 }
 
 void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {
+    // TODO...
     int status = msg.StatusMsg();
     
     switch (status) {
@@ -43,7 +50,6 @@ void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {
         case IMidiMsg::kChannelAftertouch:
         case IMidiMsg::kPitchWheel:
             mDSP.ProcessMidiMsg(msg);
-            SendMidiMsg(msg);
             break;
         
         default:
@@ -52,10 +58,12 @@ void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {
 }
 
 void PsxSampler::OnParamChange(int paramIdx) noexcept {
-    mDSP.SetParam(paramIdx, GetParam(paramIdx)->Value());
+    // TODO...
+    // mDSP.SetParam(paramIdx, GetParam(paramIdx)->Value());
 }
 
 bool PsxSampler::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept {
+    // TODO...
     if ((ctrlTag == kCtrlTagBender) && (msgTag == IWheelControl::kMessageTagSetPitchBendRange)) {
         const int bendRange = *static_cast<const int*>(pData);
         mDSP.mSynth.SetPitchBendRange(bendRange);
@@ -68,17 +76,27 @@ bool PsxSampler::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pD
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::DefinePluginParams() noexcept {
-    GetParam(kParamGain)->InitDouble("Gain", 100., 0., 100.0, 0.01, "%");
-    GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 30.);
-    GetParam(kParamAttack)->InitDouble("Attack", 10., 1., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    GetParam(kParamDecay)->InitDouble("Decay", 10., 1., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    GetParam(kParamSustain)->InitDouble("Sustain", 50., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-    GetParam(kParamRelease)->InitDouble("Release", 10., 2., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-    GetParam(kParamLFOShape)->InitEnum("LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-    GetParam(kParamLFORateHz)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-    GetParam(kParamLFORateTempo)->InitEnum("LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-    GetParam(kParamLFORateMode)->InitBool("LFO Sync", true);
-    GetParam(kParamLFODepth)->InitPercentage("LFO Depth");
+    GetParam(kParamSampleRate)->InitInt("sampleRate", 11025, 1, INT32_MAX, "", IParam::EFlags::kFlagMeta);          // Influences 'baseNote'
+    GetParam(kParamBaseNote)->InitDouble("baseNote", 84, 0.00001, 10000.0, 0.125, "", IParam::EFlags::kFlagMeta);   // Influences 'sampleRate'
+    GetParam(kParamLengthInSamples)->InitInt("lengthInSamples", 0, 0, INT32_MAX);
+    GetParam(kParamLengthInBlocks)->InitInt("lengthInBlocks", 0, 0, INT32_MAX);
+    GetParam(kParamLoopStartSample)->InitInt("loopStartSample", 0, 0, INT32_MAX);
+    GetParam(kParamLoopEndSample)->InitInt("loopEndSample", 0, 0, INT32_MAX);
+    GetParam(kParamVolume)->InitInt("volume", 127, 0, 127);
+    GetParam(kParamPan)->InitInt("pan", 64, 0, 127);
+    GetParam(kParamPitchstepUp)->InitInt("pitchstepUp", 1, 0, 36);
+    GetParam(kParamPitchstepDown)->InitInt("pitchstepDown", 1, 0, 36);
+    GetParam(kParamAttackStep)->InitInt("attackStep", 3, 0, 3);
+    GetParam(kParamAttackShift)->InitInt("attackShift", 0, 0, 31);
+    GetParam(kParamAttackIsExp)->InitInt("attackIsExp", 0, 0, 1);
+    GetParam(kParamDecayShift)->InitInt("decayShift", 0, 0, 15);
+    GetParam(kParamSustainLevel)->InitInt("sustainLevel", 15, 0, 15);
+    GetParam(kParamSustainStep)->InitInt("sustainStep", 0, 0, 3);
+    GetParam(kParamSustainShift)->InitInt("sustainShift", 31, 0, 31);
+    GetParam(kParamSustainDec)->InitInt("sustainDec", 0, 0, 1);
+    GetParam(kParamSustainIsExp)->InitInt("sustainIsExp", 1, 0, 1);
+    GetParam(kParamReleaseShift)->InitInt("releaseShift", 0, 0, 31);
+    GetParam(kParamReleaseIsExp)->InitInt("releaseIsExp", 0, 0, 1);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -124,6 +142,21 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->AttachControl(new IVGroupControl(bndTrackPanel, "Track"));
         pGraphics->AttachControl(new IVGroupControl(bndEnvelopePanel, "Envelope"));
 
+        // Make a read only edit box
+        const auto makeReadOnlyEditBox = [=](const IRECT bounds, const int paramIdx) noexcept {
+            const IText textStyle =
+                editBoxTextStyle
+                .WithFGColor(IColor(255, 255, 255, 255))
+                .WithSize(20.0f)
+                .WithAlign(EAlign::Near);
+
+            ICaptionControl* const pCtrl = new ICaptionControl(bounds, paramIdx, textStyle, IColor(0, 0, 0, 0), false);
+            pCtrl->SetDisabled(true);
+            pCtrl->DisablePrompt(true);
+            pCtrl->SetBlend(IBlend(EBlend::Default, 1.0f));
+            return pCtrl;
+        };
+
         // Sample panel
         {
             const IRECT bndPanelPadded = bndSamplePanel.GetReducedFromTop(20.0f);
@@ -135,8 +168,8 @@ void PsxSampler::DoEditorSetup() noexcept {
             pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromBottom(30.0f), SplashClickActionFunc, "Load"));
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromTop(30.0f), "Sample Rate", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromBottom(30.0f), "Base Note", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), kParamSampleRate, editBoxTextStyle, editBoxBgColor, false));
+            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromBottom(20.0f), kParamBaseNote, editBoxTextStyle, editBoxBgColor, false));
         }
 
         // Sample info panel
@@ -149,12 +182,12 @@ void PsxSampler::DoEditorSetup() noexcept {
 
             pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromTop(30.0f), "Length (samples)", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromBottom(30.0f), "Length (blocks)", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColLengthValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ICaptionControl(bndColLengthValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(makeReadOnlyEditBox(bndColLengthValues.GetFromTop(20.0f), kParamLengthInSamples));
+            pGraphics->AttachControl(makeReadOnlyEditBox(bndColLengthValues.GetFromBottom(20.0f), kParamLengthInBlocks));
             pGraphics->AttachControl(new IVLabelControl(bndColLoopLabels.GetFromTop(30.0f), "Loop Start Sample", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColLoopLabels.GetFromBottom(30.0f), "Loop End Sample", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColLoopValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ICaptionControl(bndColLoopValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(makeReadOnlyEditBox(bndColLoopValues.GetFromTop(20.0f), kParamLoopStartSample));
+            pGraphics->AttachControl(makeReadOnlyEditBox(bndColLoopValues.GetFromBottom(20.0f), kParamLoopEndSample));
         }
 
         // Track Panel
@@ -165,10 +198,10 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColPStepUp = bndPanelPadded.GetReducedFromLeft(160.0f).GetFromLeft(120.0f);
             const IRECT bndColPStepDown = bndPanelPadded.GetReducedFromLeft(280.0f).GetFromLeft(120.0f);
 
-            pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamGain, "Volume", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamGain, "Pan", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamGain, "Pitchstep Up", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamGain, "Pitchstep Down", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamVolume, "Volume", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamPan, "Pan", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down", DEFAULT_STYLE, true));
         }
 
         // Envelope Panel
@@ -182,17 +215,17 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndCol6 = bndPanelPadded.GetReducedFromLeft(600.0f).GetFromLeft(120.0f);
             const IRECT bndCol7 = bndPanelPadded.GetReducedFromLeft(720.0f).GetFromLeft(120.0f);
 
-            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamGain, "Attack Step", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Attack Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol2.GetFromTop(80.0f), kParamGain, "Attack Is Exp.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamGain, "Decay Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamGain, "Sustain Level", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamGain, "Sustain Step", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Sustain Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetFromTop(80.0f), kParamGain, "Sustain Dec.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Sustain Is Exp.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamGain, "Release Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Release Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol2.GetFromTop(80.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetFromTop(80.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true));
         }
 
         // Add the test keyboard and pitch bend wheel

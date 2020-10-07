@@ -6,28 +6,47 @@
 #include "../../PluginsCommon/Spu.h"
 #include <mutex>
 
-const int kNumPresets = 1;
+using namespace iplug;
+using namespace igraphics;
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+// All of the parameters used by the instrument.
+// Note that some of these are purely informational, and don't actually affect anything.
+// Sample rate and base note are also two views looking at the same information.
+//------------------------------------------------------------------------------------------------------------------------------------------
 enum EParams : uint32_t {
-    kParamGain = 0,
-    kParamNoteGlideTime,
-    kParamAttack,
-    kParamDecay,
-    kParamSustain,
-    kParamRelease,
-    kParamLFOShape,
-    kParamLFORateHz,
-    kParamLFORateTempo,
-    kParamLFORateMode,
-    kParamLFODepth,
+    kParamSampleRate,
+    kParamBaseNote,
+    kParamLengthInSamples,
+    kParamLengthInBlocks,
+    kParamLoopStartSample,
+    kParamLoopEndSample,
+    kParamVolume,
+    kParamPan,
+    kParamPitchstepUp,
+    kParamPitchstepDown,
+    kParamAttackStep,
+    kParamAttackShift,
+    kParamAttackIsExp,
+    kParamDecayShift,
+    kParamSustainLevel,
+    kParamSustainStep,
+    kParamSustainShift,
+    kParamSustainDec,
+    kParamSustainIsExp,
+    kParamReleaseShift,
+    kParamReleaseIsExp,
     kNumParams
 };
 
 #if IPLUG_DSP
-    // will use EParams in PsxSampler_DSP.h
+    // Will use EParams in PsxSampler_DSP.h
     #include "PsxSampler_DSP.h"
 #endif
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+// UI control identifiers
+//------------------------------------------------------------------------------------------------------------------------------------------
 enum EControlTags : uint32_t {
     kCtrlTagMeter = 0,
     kCtrlTagKeyboard,
@@ -35,9 +54,9 @@ enum EControlTags : uint32_t {
     kNumCtrlTags
 };
 
-using namespace iplug;
-using namespace igraphics;
-
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Logic for the PlayStation 1 sampler instrument plugin
+//------------------------------------------------------------------------------------------------------------------------------------------
 class PsxSampler final : public Plugin {
 public:
     PsxSampler(const InstanceInfo& info) noexcept;
