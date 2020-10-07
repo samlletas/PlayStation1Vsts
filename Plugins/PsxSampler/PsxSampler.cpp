@@ -6,9 +6,6 @@
 static constexpr uint32_t   kSpuRamSize     = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 static constexpr uint32_t   kSpuNumVoices   = 24;           // Maximum number of SPU voices: this is the hardware limit of the PS1
 
-static constexpr const char* const ICON_FK_SQUARE_O = u8"\uf096";
-static constexpr const char* const ICON_FK_CHECK_SQUARE = u8"\uf14a";
-
 PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
     , mSpu()
@@ -99,7 +96,6 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->EnableMouseOver(true);
         pGraphics->EnableMultiTouch(true);
         pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
-        pGraphics->LoadFont("ForkAwesome", FORK_AWESOME_FN);
 
         // Styles
         const IVStyle labelStyle =
@@ -115,15 +111,16 @@ void PsxSampler::DoEditorSetup() noexcept {
         
         const IText editBoxTextStyle = DEFAULT_TEXT;
         const IColor editBoxBgColor = IColor(255, 255, 255, 255);
-        const IText forkAwesomeText = { 16.0f, "ForkAwesome" };
 
         // Setup the panels
         const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
-        const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetReducedFromRight(40);
-        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(80).GetReducedFromRight(40);
-        const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(180).GetFromTop(250);
+        const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetFromLeft(300);
+        const IRECT bndSampleInfoPanel = bndPadded.GetFromTop(80).GetReducedFromLeft(310).GetFromLeft(510);
+        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(410);
+        const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(200).GetFromTop(230).GetFromLeft(860);
 
         pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
+        pGraphics->AttachControl(new IVGroupControl(bndSampleInfoPanel, "Sample Info"));
         pGraphics->AttachControl(new IVGroupControl(bndTrackPanel, "Track"));
         pGraphics->AttachControl(new IVGroupControl(bndEnvelopePanel, "Envelope"));
 
@@ -131,23 +128,71 @@ void PsxSampler::DoEditorSetup() noexcept {
         {
             const IRECT bndPanelPadded = bndSamplePanel.GetReducedFromTop(20.0f);
             const IRECT bndColLoadSave = bndPanelPadded.GetFromLeft(100.0f);
-            const IRECT bndColSizeRateLabels = bndPanelPadded.GetReducedFromLeft(110.0f).GetFromLeft(100.0f);
-            const IRECT bndColSizeRateValues = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(80.0f).GetPadded(-4.0f);
-            const IRECT bndColBaseNoteLabels = bndPanelPadded.GetReducedFromLeft(300.0f).GetFromLeft(100.0f);
-            const IRECT bndColBaseNoteValues = bndPanelPadded.GetReducedFromLeft(410.0f).GetFromLeft(100.0f).GetPadded(-4.0f);
-            const IRECT bndColLooped = bndPanelPadded.GetReducedFromLeft(520.0f).GetFromLeft(100.0f);
+            const IRECT bndColRateNoteLabels = bndPanelPadded.GetReducedFromLeft(110.0f).GetFromLeft(100.0f);
+            const IRECT bndColRateNoteValues = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(80.0f).GetPadded(-4.0f);
+            
+            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromTop(30.0f), SplashClickActionFunc, "Save"));
+            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromBottom(30.0f), SplashClickActionFunc, "Load"));
+            pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromTop(30.0f), "Sample Rate", labelStyle));
+            pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromBottom(30.0f), "Base Note", labelStyle));
+            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+        }
 
-            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromTop(30.0f), SplashClickActionFunc, "Load"));
-            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromBottom(30.0f), SplashClickActionFunc, "Save"));
-            pGraphics->AttachControl(new IVLabelControl(bndColSizeRateLabels.GetFromTop(30.0f), "Num Samples", labelStyle));
-            pGraphics->AttachControl(new IVLabelControl(bndColSizeRateLabels.GetFromBottom(30.0f), "Sample Rate", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColSizeRateValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ICaptionControl(bndColSizeRateValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new IVLabelControl(bndColBaseNoteLabels.GetFromTop(30.0f), "Base Note", labelStyle));
-            pGraphics->AttachControl(new IVLabelControl(bndColBaseNoteLabels.GetFromBottom(30.0f), "Base Note Frac", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColBaseNoteValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ICaptionControl(bndColBaseNoteValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
-            pGraphics->AttachControl(new ITextToggleControl(bndColLooped, 0, ICON_FK_SQUARE_O, ICON_FK_CHECK_SQUARE, forkAwesomeText));
+        // Sample info panel
+        {
+            const IRECT bndPanelPadded = bndSampleInfoPanel.GetReducedFromTop(20.0f);
+            const IRECT bndColLengthLabels = bndPanelPadded.GetReducedFromLeft(10.0f).GetFromLeft(130.0f);
+            const IRECT bndColLengthValues = bndPanelPadded.GetReducedFromLeft(150.0f).GetFromLeft(100).GetPadded(-4.0f);
+            const IRECT bndColLoopLabels = bndPanelPadded.GetReducedFromLeft(260.0f).GetFromLeft(130.0f);
+            const IRECT bndColLoopValues = bndPanelPadded.GetReducedFromLeft(400.0f).GetFromLeft(100.0f).GetPadded(-4.0f);
+
+            pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromTop(30.0f), "Length (samples)", labelStyle));
+            pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromBottom(30.0f), "Length (blocks)", labelStyle));
+            pGraphics->AttachControl(new ICaptionControl(bndColLengthValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColLengthValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new IVLabelControl(bndColLoopLabels.GetFromTop(30.0f), "Loop Start Sample", labelStyle));
+            pGraphics->AttachControl(new IVLabelControl(bndColLoopLabels.GetFromBottom(30.0f), "Loop End Sample", labelStyle));
+            pGraphics->AttachControl(new ICaptionControl(bndColLoopValues.GetFromTop(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+            pGraphics->AttachControl(new ICaptionControl(bndColLoopValues.GetFromBottom(20.0f), 0, editBoxTextStyle, editBoxBgColor));
+        }
+
+        // Track Panel
+        {
+            const IRECT bndPanelPadded = bndTrackPanel.GetReducedFromTop(24.0f).GetReducedFromBottom(4.0f);
+            const IRECT bndColVol = bndPanelPadded.GetFromLeft(80.0f);
+            const IRECT bndColPan = bndPanelPadded.GetReducedFromLeft(80.0f).GetFromLeft(80.0f);
+            const IRECT bndColPStepUp = bndPanelPadded.GetReducedFromLeft(160.0f).GetFromLeft(120.0f);
+            const IRECT bndColPStepDown = bndPanelPadded.GetReducedFromLeft(280.0f).GetFromLeft(120.0f);
+
+            pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamGain, "Volume", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamGain, "Pan", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamGain, "Pitchstep Up", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamGain, "Pitchstep Down", DEFAULT_STYLE, true));
+        }
+
+        // Envelope Panel
+        {
+            const IRECT bndPanelPadded = bndEnvelopePanel.GetReducedFromTop(30.0f).GetReducedFromBottom(4.0f);
+            const IRECT bndCol1 = bndPanelPadded.GetFromLeft(120.0f);
+            const IRECT bndCol2 = bndPanelPadded.GetReducedFromLeft(120.0f).GetFromLeft(120.0f);
+            const IRECT bndCol3 = bndPanelPadded.GetReducedFromLeft(240.0f).GetFromLeft(120.0f);
+            const IRECT bndCol4 = bndPanelPadded.GetReducedFromLeft(360.0f).GetFromLeft(120.0f);
+            const IRECT bndCol5 = bndPanelPadded.GetReducedFromLeft(480.0f).GetFromLeft(120.0f);
+            const IRECT bndCol6 = bndPanelPadded.GetReducedFromLeft(600.0f).GetFromLeft(120.0f);
+            const IRECT bndCol7 = bndPanelPadded.GetReducedFromLeft(720.0f).GetFromLeft(120.0f);
+
+            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamGain, "Attack Step", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Attack Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol2.GetFromTop(80.0f), kParamGain, "Attack Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamGain, "Decay Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamGain, "Sustain Level", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamGain, "Sustain Step", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Sustain Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetFromTop(80.0f), kParamGain, "Sustain Dec.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Sustain Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamGain, "Release Shift", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamGain, "Release Is Exp.", DEFAULT_STYLE, true));
         }
 
         // Add the test keyboard and pitch bend wheel
@@ -158,53 +203,19 @@ void PsxSampler::DoEditorSetup() noexcept {
         pGraphics->AttachControl(new IWheelControl(bndPitchWheel), kCtrlTagBender);
         pGraphics->AttachControl(new IVKeyboardControl(bndKeyboard), kCtrlTagKeyboard);
 
-        #if false
-        pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(0, 2, 6).GetCentredInside(90), kParamGain, "Gain"));
-        pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(1, 2, 6).GetCentredInside(90), kParamNoteGlideTime, "Glide"));
-
-        const IRECT sliders = controls.GetGridCell(2, 2, 6).Union(controls.GetGridCell(3, 2, 6)).Union(controls.GetGridCell(4, 2, 6));
-        pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(0, 1, 4).GetMidHPadded(30.), kParamAttack, "Attack"));
-        pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(1, 1, 4).GetMidHPadded(30.), kParamDecay, "Decay"));
-        pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(2, 1, 4).GetMidHPadded(30.), kParamSustain, "Sustain"));
-        pGraphics->AttachControl(new IVSliderControl(sliders.GetGridCell(3, 1, 4).GetMidHPadded(30.), kParamRelease, "Release"));
-        #endif
-
         // Add the volume meter
-        const IRECT bndVolMeter = bndPadded.GetReducedFromTop(10).GetFromRight(30).GetFromTop(160);
+        const IRECT bndVolMeter = bndPadded.GetReducedFromTop(10).GetFromRight(30).GetFromTop(180);
         pGraphics->AttachControl(new IVLEDMeterControl<2>(bndVolMeter), kCtrlTagMeter);
 
-        #if false
-        pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateHz, "Rate"), kNoTag, "LFO")->Hide(true);
-        pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateTempo, "Rate"), kNoTag, "LFO")->DisablePrompt(false);
-        pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 1, 2, 3).GetCentredInside(60), kParamLFODepth, "Depth"), kNoTag, "LFO");
-        pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 2, 2, 3).GetCentredInside(60), kParamLFOShape, "Shape"), kNoTag, "LFO")->DisablePrompt(false);
-
-        pGraphics->AttachControl(
-            new IVSlideSwitchControl(
-                lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20),
-                kParamLFORateMode,
-                "Sync",
-                DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false),
-                false
-            ),
-            kNoTag,
-            "LFO"
-        )->SetAnimationEndActionFunction(
-            [pGraphics](IControl* pControl) noexcept {
-                bool sync = pControl->GetValue() > 0.5;
-                pGraphics->HideControl(kParamLFORateHz, sync);
-                pGraphics->HideControl(kParamLFORateTempo, !sync);
-            }
-        );
-
-        pGraphics->AttachControl(new IVGroupControl("LFO", "LFO", 10.f, 20.f, 10.f, 10.f));
+        // Allow Qwerty keyboard - but only in standalone mode.
+        // In VST mode the host might have it's own keyboard input functionality, and this could interfere...
+        #if APP_API
+          pGraphics->SetQwertyMidiKeyHandlerFunc(
+              [pGraphics](const IMidiMsg& msg) noexcept {
+                  dynamic_cast<IVKeyboardControl*>(pGraphics->GetControlWithTag(kCtrlTagKeyboard))->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
+              }
+          );
         #endif
-
-        pGraphics->SetQwertyMidiKeyHandlerFunc(
-            [pGraphics](const IMidiMsg& msg) noexcept {
-                dynamic_cast<IVKeyboardControl*>(pGraphics->GetControlWithTag(kCtrlTagKeyboard))->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
-            }
-        );
     };
 }
 
