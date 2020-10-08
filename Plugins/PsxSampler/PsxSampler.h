@@ -59,6 +59,9 @@ enum EControlTags : uint32_t {
 //------------------------------------------------------------------------------------------------------------------------------------------
 class PsxSampler final : public Plugin {
 public:
+    // Maximum number of active voices: this is the hardware limit of the PS1
+    static constexpr uint32_t kMaxVoices = 24;
+
     PsxSampler(const InstanceInfo& info) noexcept;
 
     virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
@@ -69,9 +72,17 @@ public:
     virtual bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
 
 private:
+    // Information for a playing voice
+    struct VoiceInfo {
+        uint16_t midiNote;            // The note played
+        uint16_t midiVelocity;        // 0-127 velocity
+        uint32_t numSamplesActive;    // Number of samples the voice has been active for
+    };
+
     Spu::Core               mSpu;
     std::recursive_mutex    mSpuMutex;
-    uint32_t                mNumSampleBlocks;
+    uint32_t                mCurMidiPitchBend;        // Current MIDI pitch bend value, a 14-bit value: 0x2000 = center, 0x0000 = lowest, 0x3FFF = highest
+    VoiceInfo               mVoiceInfos[kMaxVoices];
     PsxSamplerDSP<sample>   mDSP;
     IPeakSender<2>          mMeterSender;
 
@@ -80,6 +91,11 @@ private:
     void DoDspSetup() noexcept;
     virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
     virtual void OnRestoreState() noexcept override;
-    void UpdateSpuVoicesFromParams() noexcept;
     void AddSampleTerminator() noexcept;
+    void UpdateSpuVoicesFromParams() noexcept;
+    void UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept;
+    static uint16_t CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept;
+    static Spu::Volume CalcSpuVoiceVolume(const uint32_t volume, const uint32_t pan, const uint32_t velocity) noexcept;
+    Spu::AdsrEnvelope GetCurrentSpuAdsrEnv() const noexcept;
+    float GetCurrentPitchBendInNotes() const noexcept;
 };

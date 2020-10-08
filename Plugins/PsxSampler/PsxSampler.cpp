@@ -3,9 +3,24 @@
 #include "IPlug_include_in_plug_src.h"
 #include "LFO.h"
 
-static constexpr uint32_t   kSpuRamSize     = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
-static constexpr uint32_t   kSpuNumVoices   = 24;           // Maximum number of SPU voices: this is the hardware limit of the PS1
-static constexpr int        kNumPresets     = 1;            // Not doing any actual presets for this instrument
+static constexpr uint32_t   kSpuRamSize         = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
+static constexpr int        kNumPresets         = 1;            // Not doing any actual presets for this instrument
+static constexpr uint32_t   MIDI_MIDDLE_NOTE    = 60;           // The middle note in MIDI, typically assigned to 'Middle C' in some octave
+static constexpr int32_t    PITCH_BEND_CENTER   = 0x2000u;      // Pitch bend center value
+static constexpr int32_t    PITCH_BEND_MAX      = 0x3FFFu;      // Maximum pitch bend value
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Figures out the sample rate of a given note (specified in semitones) using a reference base note (in semitones) and the sample
+// rate that the base note sounds at. This is similar to a utility implemented for PsyDoom in the LIBSPU module.
+//
+// For a good explantion of the conversion from note to frequency, see:
+//  https://www.translatorscafe.com/unit-converter/en-US/calculator/note-frequency/
+//------------------------------------------------------------------------------------------------------------------------------------------
+static float GetNoteSampleRate(const float baseNote, const float baseNoteSampleRate, const float note) noexcept {
+    const float noteOffset = note - baseNote;
+    const float sampleRate = baseNoteSampleRate * std::powf(2.0f, noteOffset / 12.0f);
+    return sampleRate;
+}
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Initializes the sampler instrument plugin
@@ -14,11 +29,13 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     : Plugin(info, MakeConfig(kNumParams, kNumPresets))
     , mSpu()
     , mSpuMutex()
-    , mNumSampleBlocks(0)
+    , mCurMidiPitchBend(PITCH_BEND_CENTER)
+    , mVoiceInfos{}
     , mDSP{16}
     , mMeterSender()
 {
     DefinePluginParams();
+    DoDspSetup();
     DoEditorSetup();
 }
 
@@ -257,7 +274,7 @@ void PsxSampler::DoEditorSetup() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::DoDspSetup() noexcept {
     // Create the PlayStation SPU core
-    Spu::initCore(mSpu, kSpuRamSize, kSpuNumVoices);
+    Spu::initCore(mSpu, kSpuRamSize, kMaxVoices);
 
     // Set default volume levels
     mSpu.masterVol.left = 0x3FFF;
@@ -280,7 +297,8 @@ void PsxSampler::DoDspSetup() noexcept {
     mSpu.processedReverb = {};
     mSpu.reverbRegs = {};
 
-    // Terminate the current sample in SPU RAM
+    // Update SPU voices from the current instrument settings and terminate the current empty sample in SPU RAM
+    UpdateSpuVoicesFromParams();
     AddSampleTerminator();
 }
 
@@ -301,11 +319,6 @@ void PsxSampler::OnRestoreState() noexcept {
     AddSampleTerminator();
 }
 
-void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
-    // TODO...
-    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
-}
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Add a terminator for the currently loaded sample consisting of two silent ADPCM blocks which will loop indefinitely.
 // Used to guarantee a sound will stop playing after it reaches the end, since SPU voices technically never stop.
@@ -315,7 +328,8 @@ void PsxSampler::AddSampleTerminator() noexcept {
     // Figure out which ADPCM sample block to write the terminators
     constexpr uint32_t kMaxSampleBlocks = kSpuRamSize / Spu::ADPCM_BLOCK_SIZE;
     static_assert(kMaxSampleBlocks >= 2);
-    const uint32_t termAdpcmBlocksStartIdx = std::min(mNumSampleBlocks, kMaxSampleBlocks - 2);
+    const uint32_t numSampleBlocks = (uint32_t) GetParam(kParamLengthInBlocks)->Value();
+    const uint32_t termAdpcmBlocksStartIdx = std::min(numSampleBlocks, kMaxSampleBlocks - 2);
     std::byte* const pTermAdpcmBlocks = mSpu.pRam + (size_t) Spu::ADPCM_BLOCK_SIZE * termAdpcmBlocksStartIdx;
 
     // Zero the bytes for the two ADPCM sample blocks firstly
@@ -325,4 +339,145 @@ void PsxSampler::AddSampleTerminator() noexcept {
     // Make the first block be the loop start, and the second block be loop end:
     pTermAdpcmBlocks[1]   = (std::byte) Spu::ADPCM_FLAG_LOOP_START;
     pTermAdpcmBlocks[17]  = (std::byte) Spu::ADPCM_FLAG_LOOP_END;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Update all of the SPU voices from the current parameters.
+// Note: assumes the SPU lock is held.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
+    // These parameters affect the pitch and volume of all voices
+    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+    const uint32_t volume = (uint32_t) GetParam(kParamVolume)->Value();
+    const uint32_t pan = (uint32_t) GetParam(kParamPan)->Value();
+
+    // Get the current pitch bend to apply to all voices (in semitones) and the ADSR envelope to use for all voices
+    Spu::AdsrEnvelope adsrEnv = GetCurrentSpuAdsrEnv();
+    const float pitchBendInNotes = GetCurrentPitchBendInNotes();
+
+    // Update all the voices
+    const uint32_t numVoices = mSpu.numVoices;
+    Spu::Voice* const pVoices = mSpu.pVoices;
+
+    for (uint32_t voiceIdx = 0; voiceIdx < numVoices; ++voiceIdx) {
+        const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
+        Spu::Voice& voice = pVoices[voiceIdx];
+
+        voice.sampleRate = CalcSpuVoiceSampleRate(sampleRate, (float) voiceInfo.midiNote + pitchBendInNotes);
+        voice.bDisabled = false;
+        voice.bDoReverb = false;
+        voice.env = adsrEnv;
+        voice.volume = CalcSpuVoiceVolume(volume, pan, voiceInfo.midiVelocity);
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Update a single SPU voice (only) from current parameters.
+// Note: assumes the SPU lock is held.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept {
+    assert(voiceIdx < kMaxVoices);
+
+    // This will affect the pitch and volume of the voice
+    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+    const uint32_t volume = (uint32_t) GetParam(kParamVolume)->Value();
+    const uint32_t pan = (uint32_t) GetParam(kParamPan)->Value();
+
+    // Get the envelope to use and the current pitch bend
+    Spu::AdsrEnvelope adsrEnv = GetCurrentSpuAdsrEnv();
+    const float pitchBendInNotes = GetCurrentPitchBendInNotes();
+
+    // Update the voice
+    const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
+    Spu::Voice& voice = mSpu.pVoices[voiceIdx];
+
+    voice.sampleRate = CalcSpuVoiceSampleRate(sampleRate, (float) voiceInfo.midiNote + pitchBendInNotes);
+    voice.bDisabled = false;
+    voice.bDoReverb = false;
+    voice.env = adsrEnv;
+    voice.volume = CalcSpuVoiceVolume(volume, pan, voiceInfo.midiVelocity);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Compute the SPU's format for sample rate where a value of 0x1000 means 44,100 Hz, half that is 22,050 Hz and so on.
+// Computes using the sample rate of the sound (11,025 etc.) and the current note being played, which can also be fractional too.
+//------------------------------------------------------------------------------------------------------------------------------------------
+uint16_t PsxSampler::CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept {
+    // Convert the base sample rate into the SPU's scale.
+    // For the SPU a sample rate of '11025' is equal to '0x400' so compute how many '11025' units we have and then scale by '0x400' (1024)
+    const float baseSampleRateSpu = ((float) baseSampleRate / 11025.0f) * 1024.0f;
+
+    // Now figure out the SPU rate to play the note at, round and clamp
+    const float spuSampleRate = GetNoteSampleRate((float) MIDI_MIDDLE_NOTE, baseSampleRateSpu, voiceNote);
+    return (uint16_t) std::clamp<float>(std::roundf(spuSampleRate), 0.0f, UINT16_MAX);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Compute the left/right volume for an SPU voice given the instrument volume (0-127) and pan (0-127, 64 = center) and the velocity
+// that the note was sounded with, from 0-127.
+//------------------------------------------------------------------------------------------------------------------------------------------
+Spu::Volume PsxSampler::CalcSpuVoiceVolume(const uint32_t volume, const uint32_t pan, const uint32_t velocity) noexcept {
+    const float volumeF = std::max((float) volume / 127.0f, 1.0f);
+    const float velocityF = std::max((float) velocity / 127.0f, 1.0f);
+    const float scaleF = volumeF * velocityF;
+    const float panF = (pan < 64) ? ((float) pan - 64.0f) / 64.0f : std::max(((float) pan - 64.0f) / 63.0f, 1.0f);
+    const float volumeLF = (1.0f - panF) / 2.0f;
+    const float volumeRF = (1.0f + panF) / 2.0f;
+
+    return Spu::Volume{
+        (int16_t) std::round(volumeLF * (float) 0x7FFF),
+        (int16_t) std::round(volumeRF * (float) 0x7FFF)
+    };
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Get the current SPU ADSR envelope to use, based on the instrument parameters
+//------------------------------------------------------------------------------------------------------------------------------------------
+Spu::AdsrEnvelope PsxSampler::GetCurrentSpuAdsrEnv() const noexcept {  
+    const uint32_t attackStep = (uint32_t) GetParam(kParamAttackStep)->Value();
+    const uint32_t attackShift = (uint32_t) GetParam(kParamAttackShift)->Value();
+    const uint32_t attackIsExp = (uint32_t) GetParam(kParamAttackIsExp)->Value();
+    const uint32_t decayShift = (uint32_t) GetParam(kParamDecayShift)->Value();
+    const uint32_t sustainLevel = (uint32_t) GetParam(kParamSustainLevel)->Value();
+    const uint32_t sustainStep = (uint32_t) GetParam(kParamSustainStep)->Value();
+    const uint32_t sustainShift = (uint32_t) GetParam(kParamSustainShift)->Value();
+    const uint32_t sustainDec = (uint32_t) GetParam(kParamSustainDec)->Value();
+    const uint32_t sustainIsExp = (uint32_t) GetParam(kParamSustainIsExp)->Value();
+    const uint32_t releaseShift = (uint32_t) GetParam(kParamReleaseShift)->Value();
+    const uint32_t releaseIsExp = (uint32_t) GetParam(kParamReleaseIsExp)->Value();
+
+    Spu::AdsrEnvelope adsrEnv = {};
+    adsrEnv.sustainLevel = sustainLevel;
+    adsrEnv.decayShift = decayShift;
+    adsrEnv.attackStep = attackStep;
+    adsrEnv.attackShift = attackShift;
+    adsrEnv.bAttackExp = attackIsExp;
+    adsrEnv.releaseShift = releaseShift;
+    adsrEnv.bReleaseExp = releaseIsExp;
+    adsrEnv.sustainStep = sustainStep;
+    adsrEnv.sustainShift = sustainShift;
+    adsrEnv.bSustainDec = sustainDec;
+    adsrEnv.bSustainExp = sustainIsExp;
+
+    return adsrEnv;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Return how many semitones of pitch bend are currently being applied based on the current MIDI pitch bend value and the pitchbend range
+//------------------------------------------------------------------------------------------------------------------------------------------
+float PsxSampler::GetCurrentPitchBendInNotes() const noexcept {
+    // Get the range of the pitch bend in semitones
+    const float pitchstepUp = (float) GetParam(kParamPitchstepUp)->Value();
+    const float pitchstepDown = (float) GetParam(kParamPitchstepDown)->Value();
+
+    // Get the clamped MIDI pitch bend
+    const uint32_t midiPitchBend = std::min<uint32_t>(mCurMidiPitchBend, PITCH_BEND_MAX);
+
+    // Get the normalized pitch bend in a -1.0 to +1.0 range:
+    const float pitchBendNormalized = (midiPitchBend < PITCH_BEND_CENTER) ?
+        ((float) mCurMidiPitchBend - (float) PITCH_BEND_CENTER) / (float)(PITCH_BEND_CENTER) :
+        ((float) mCurMidiPitchBend - (float) PITCH_BEND_CENTER) / (float)(PITCH_BEND_CENTER - 1);
+
+    // Figure out the semitone pitch bend and return
+    return (pitchBendNormalized < 0) ? pitchBendNormalized * pitchstepDown : pitchBendNormalized * pitchstepUp;
 }
