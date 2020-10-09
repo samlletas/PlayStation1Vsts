@@ -66,10 +66,7 @@ public:
 
     virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
     virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
-    virtual void OnReset() noexcept override;
-    virtual void OnParamChange(int paramIdx) noexcept override;
     virtual void OnIdle() noexcept override;
-    virtual bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept override;
 
 private:
     // Information for a playing voice
@@ -83,8 +80,8 @@ private:
     std::recursive_mutex    mSpuMutex;
     uint32_t                mCurMidiPitchBend;        // Current MIDI pitch bend value, a 14-bit value: 0x2000 = center, 0x0000 = lowest, 0x3FFF = highest
     VoiceInfo               mVoiceInfos[kMaxVoices];
-    PsxSamplerDSP<sample>   mDSP;
     IPeakSender<2>          mMeterSender;
+    IMidiQueue              mMidiQueue;
 
     void DefinePluginParams() noexcept;
     void DoEditorSetup() noexcept;
@@ -92,6 +89,13 @@ private:
     virtual void InformHostOfParamChange(int idx, double normalizedValue) noexcept override;
     virtual void OnRestoreState() noexcept override;
     void AddSampleTerminator() noexcept;
+    void ProcessMidiQueue() noexcept;
+    void ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept;
+    void ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept;
+    void ProcessMidiNoteOff(const uint8_t note) noexcept;
+    void ProcessMidiVolume(const uint8_t volume) noexcept;
+    void ProcessMidiPan(const uint8_t pan) noexcept;
+    void ProcessMidiPitchBend(const uint16_t pitchBend) noexcept;
     void UpdateSpuVoicesFromParams() noexcept;
     void UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept;
     static uint16_t CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept;
@@ -100,4 +104,5 @@ private:
     float GetCurrentPitchBendInNotes() const noexcept;
     void DoLoadVagFilePrompt(IGraphics& graphics) noexcept;
     void SetBaseNoteFromSampleRate() noexcept;
+    void SetSampleRateFromBaseNote() noexcept;
 };

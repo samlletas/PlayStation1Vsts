@@ -24,6 +24,19 @@ static float GetNoteSampleRate(const float baseNote, const float baseNoteSampleR
     return sampleRate;
 }
 
+static double GetNoteSampleRate(const double baseNote, const double baseNoteSampleRate, const double note) noexcept {
+    const double noteOffset = note - baseNote;
+    const double sampleRate = baseNoteSampleRate * std::pow(2.0, noteOffset / 12.0);
+    return sampleRate;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Convert a sample in 16-bit format to a floating point sample
+//------------------------------------------------------------------------------------------------------------------------------------------
+static double sampleInt16ToDouble(const int16_t origSample) noexcept {
+    return (origSample < 0) ? -double(origSample) / INT16_MIN : double(origSample) / INT16_MAX;
+}
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Initializes the sampler instrument plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -33,62 +46,70 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     , mSpuMutex()
     , mCurMidiPitchBend(PITCH_BEND_CENTER)
     , mVoiceInfos{}
-    , mDSP{16}
     , mMeterSender()
+    , mMidiQueue()
 {
     DefinePluginParams();
     DoDspSetup();
     DoEditorSetup();
 }
 
-void PsxSampler::ProcessBlock(sample** inputs, sample** outputs, int nFrames) noexcept {
-    // TODO...
-    mDSP.ProcessBlock(nullptr, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
-    mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Does the main sound processing work of the sampler instrument
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept {
+    // Process the requested number of samples on the SPU
+    const int numChannels = NOutChansConnected();
+
+    {
+        std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
+
+        for (int frameIdx = 0; frameIdx < numFrames; frameIdx++) {
+            // Process any incoming MIDI messages
+            ProcessMidiQueue();
+
+            // Run the SPU and grab the output sample and save
+            const Spu::StereoSample soundOut = Spu::stepCore(mSpu);
+
+            if (numChannels >= 2) {
+                pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
+                pOutputs[1][frameIdx] = sampleInt16ToDouble(soundOut.right);
+            } else if (numChannels == 1) {
+                pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
+            }
+        }
+    }
+
+    // Voice management: update the number of samples certain voices are active for and reset the parameters for other voices.
+    // Could to this for each sample processed, but that is probably overkill...
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        VoiceInfo& voiceInfo = mVoiceInfos[i];
+        
+        if (mSpu.pVoices[i].envPhase != Spu::EnvPhase::Off) {
+            voiceInfo.numSamplesActive += (uint32_t) numFrames;
+        } else {
+            voiceInfo.midiNote = 0xFFFFu;
+            voiceInfo.midiVelocity = 0xFFFFu;
+            voiceInfo.numSamplesActive = 0;
+        }
+    }
+
+    // Send the output to the meter
+    mMeterSender.ProcessBlock(pOutputs, numFrames, kCtrlTagMeter);
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Called periodically to do GUI updates
+//------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::OnIdle() noexcept {
     mMeterSender.TransmitData(*this);
 }
 
-void PsxSampler::OnReset() noexcept {
-    // TODO...
-    mDSP.Reset(GetSampleRate(), GetBlockSize());
-}
-
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI message: adds it to the queue to be processed later
+//------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {
-    // TODO...
-    int status = msg.StatusMsg();
-    
-    switch (status) {
-        case IMidiMsg::kNoteOn:
-        case IMidiMsg::kNoteOff:
-        case IMidiMsg::kPolyAftertouch:
-        case IMidiMsg::kControlChange:
-        case IMidiMsg::kProgramChange:
-        case IMidiMsg::kChannelAftertouch:
-        case IMidiMsg::kPitchWheel:
-            mDSP.ProcessMidiMsg(msg);
-            break;
-        
-        default:
-            break;
-    }
-}
-
-void PsxSampler::OnParamChange(int paramIdx) noexcept {
-    // TODO...
-    // mDSP.SetParam(paramIdx, GetParam(paramIdx)->Value());
-}
-
-bool PsxSampler::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) noexcept {
-    // TODO...
-    if ((ctrlTag == kCtrlTagBender) && (msgTag == IWheelControl::kMessageTagSetPitchBendRange)) {
-        const int bendRange = *static_cast<const int*>(pData);
-        mDSP.mSynth.SetPitchBendRange(bendRange);
-    }
-    
-    return false;
+    mMidiQueue.Add(msg);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -309,6 +330,13 @@ void PsxSampler::DoDspSetup() noexcept {
     mSpu.processedReverb = {};
     mSpu.reverbRegs = {};
 
+    // Default initialize all the SPU voice infos
+    for (VoiceInfo& voiceInfo : mVoiceInfos) {
+        voiceInfo.midiNote = 0xFFFFu;
+        voiceInfo.midiVelocity = 0xFFFFu;
+        voiceInfo.numSamplesActive = 0;
+    }
+
     // Update SPU voices from the current instrument settings and terminate the current empty sample in SPU RAM
     UpdateSpuVoicesFromParams();
     AddSampleTerminator();
@@ -317,7 +345,18 @@ void PsxSampler::DoDspSetup() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Called when a parameter changes
 //------------------------------------------------------------------------------------------------------------------------------------------
-void PsxSampler::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unused]] double normalizedValue) noexcept {
+void PsxSampler::InformHostOfParamChange(int idx, [[maybe_unused]] double normalizedValue) noexcept {
+    // These two parameters are linked
+    if (idx == kParamSampleRate) {
+        SetBaseNoteFromSampleRate();
+        GetUI()->SetAllControlsDirty();
+    } else if (idx == kParamBaseNote) {
+        SetSampleRateFromBaseNote();
+        GetUI()->SetAllControlsDirty();
+    }
+
+    // Update the SPU voices etc.
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     UpdateSpuVoicesFromParams();
 }
 
@@ -325,8 +364,11 @@ void PsxSampler::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unuse
 // Called when a preset changes
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::OnRestoreState() noexcept {
-    // TODO...
+    // Base plugin restore functionality
     Plugin::OnRestoreState();
+
+    // Update the SPU from the changes and make sure the current sample is terminated
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     UpdateSpuVoicesFromParams();
     AddSampleTerminator();
 }
@@ -351,6 +393,160 @@ void PsxSampler::AddSampleTerminator() noexcept {
     // Make the first block be the loop start, and the second block be loop end:
     pTermAdpcmBlocks[1]   = (std::byte) Spu::ADPCM_FLAG_LOOP_START;
     pTermAdpcmBlocks[17]  = (std::byte) Spu::ADPCM_FLAG_LOOP_END;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Process the MIDI queue - advances time by a single sample
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiQueue() noexcept {
+    // Continue processing the queue
+    while (!mMidiQueue.Empty()) {
+        // Is there a delay until the next message?
+        // If so then decrement the time until it and finish up.
+        {
+            IMidiMsg& msg = mMidiQueue.Peek();
+
+            if (msg.mOffset > 0) {
+                msg.mOffset--;
+                break;
+            }
+        }
+
+        // Remove the message from the queue then process
+        const IMidiMsg msg = mMidiQueue.Peek();
+        mMidiQueue.Remove();
+        ProcessQueuedMidiMsg(msg);
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Process the given MIDI message that was queued
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
+    // What type of message is it?
+    const IMidiMsg::EStatusMsg statusMsgType = msg.StatusMsg();
+    
+    switch (statusMsgType) {
+        case IMidiMsg::kNoteOn:
+            ProcessMidiNoteOn(msg.mData1 & uint8_t(0x7Fu), msg.mData1 & uint8_t(0x7Fu));
+            break;
+
+        case IMidiMsg::kNoteOff:
+            ProcessMidiNoteOff(msg.mData1 & uint8_t(0x7Fu));
+            break;
+
+        case IMidiMsg::kControlChange: {
+            switch (msg.mData1) {
+                case IMidiMsg::kChannelVolume:
+                    ProcessMidiVolume(msg.mData2 & uint8_t(0x7Fu));
+                    break;
+
+                case IMidiMsg::kPan:
+                    ProcessMidiPan(msg.mData2 & uint8_t(0x7Fu));
+                    break;
+
+                default:
+                    break;
+            }
+        };
+
+        case IMidiMsg::kPitchWheel:
+            ProcessMidiPitchBend((uint16_t)((((uint16_t) msg.mData1 & 0x7Fu) << 7) | ((uint16_t) msg.mData2 & 0x7Fu)));
+            break;
+        
+        default:
+            break;
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI note on message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept {
+    // Make sure this note is not already playing - just allowed to have 1 instance
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        if (mVoiceInfos[i].midiNote == note)
+            return;
+    }
+
+    // Try to find a free SPU voice firstly to service this request
+    uint32_t spuVoiceIdx = UINT32_MAX;
+
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        if (mSpu.pVoices[i].envPhase == Spu::EnvPhase::Off) {
+            spuVoiceIdx = i;
+            break;
+        }
+    }
+
+    // If that fails try to find the oldest playing voice to use
+    if (spuVoiceIdx == UINT32_MAX) {
+        spuVoiceIdx = 0;
+        uint32_t oldestSamplesActive = mVoiceInfos[0].numSamplesActive;
+
+        for (uint32_t i = 1; i < kMaxVoices; ++i) {
+            if (mVoiceInfos[i].numSamplesActive > oldestSamplesActive) {
+                oldestSamplesActive = mVoiceInfos[i].numSamplesActive;
+                spuVoiceIdx = i;
+            }
+        }
+    }
+
+    // Save the info for this voice
+    VoiceInfo& voiceInfo = mVoiceInfos[spuVoiceIdx];
+    voiceInfo.midiNote = note;
+    voiceInfo.midiVelocity = velocity;
+    voiceInfo.numSamplesActive = 0;
+
+    // Make sure the voice parameters are up to date and sound the voice
+    UpdateSpuVoiceFromParams(spuVoiceIdx);
+    Spu::keyOn(mSpu.pVoices[spuVoiceIdx]);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI note off message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiNoteOff(const uint8_t note) noexcept {
+    // Try to find which voice for this note
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        if (mVoiceInfos[i].midiNote == note) {
+            // Found the voice: make sure it is in the correct envelope phase to be killed off
+            Spu::Voice& voice = mSpu.pVoices[i];
+
+            if ((voice.envPhase != Spu::EnvPhase::Release) && (voice.envPhase != Spu::EnvPhase::Off)) {
+                Spu::keyOff(voice);
+            }
+
+            // Done searching
+            break;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI channel volume control message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiVolume(const uint8_t volume) noexcept {
+    GetParam(kParamVolume)->Set(volume);
+    GetUI()->SetAllControlsDirty();
+    UpdateSpuVoicesFromParams();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI pan control message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiPan(const uint8_t pan) noexcept {
+    GetParam(kParamPan)->Set(pan);
+    GetUI()->SetAllControlsDirty();
+    UpdateSpuVoicesFromParams();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Handle a MIDI pitch bend message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiPitchBend(const uint16_t pitchBend) noexcept {
+    mCurMidiPitchBend = pitchBend;
+    UpdateSpuVoicesFromParams();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -537,7 +733,6 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
     GetUI()->SetAllControlsDirty();
 
     AddSampleTerminator();
-    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -557,4 +752,13 @@ void PsxSampler::SetBaseNoteFromSampleRate() noexcept {
         const double baseNoteRounded = std::round(baseNote * 256.0) / 256.0;    // Round to 1/256 increments
         GetParam(kParamBaseNote)->Set(baseNoteRounded);
     }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Set the sample rate value from the base note
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::SetSampleRateFromBaseNote() noexcept {
+    const double sampleRate = GetNoteSampleRate(GetParam(kParamBaseNote)->Value(), 22050.0, 60.0);
+    const double sampleRateRounded = std::round(sampleRate);
+    GetParam(kParamSampleRate)->Set(sampleRateRounded);
 }
