@@ -712,10 +712,8 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
     // Clamp the length of the VAG file to be within the RAM size of the SPU
     const uint32_t numAdpcmBlocks = std::min((uint32_t) adpcmData.size(), kSpuRamSize) / Spu::ADPCM_BLOCK_SIZE;
 
-    // Transfer the sound data to the SPU, terminate the sample, and update some of the sampler parameters
+    // Update sample related parameters and lock the SPU at this point
     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
-
-    std::memcpy(mSpu.pRam, adpcmData.data(), (size_t) numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE);
 
     GetParam(kParamSampleRate)->Set((double) sampleRate);
     SetBaseNoteFromSampleRate();
@@ -725,7 +723,12 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
     GetParam(kParamLoopEndSample)->Set((double) loopEndSample);
     GetUI()->SetAllControlsDirty();
 
+    // Transfer the sound data to the SPU and terminate the sample
+    std::memcpy(mSpu.pRam, adpcmData.data(), (size_t) numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE);
     AddSampleTerminator();
+
+    // Kill all currently playing SPU voices
+    KillAllSpuVoices();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -754,4 +757,15 @@ void PsxSampler::SetSampleRateFromBaseNote() noexcept {
     const double sampleRate = GetNoteSampleRate(GetParam(kParamBaseNote)->Value(), 22050.0, 60.0);
     const double sampleRateRounded = std::round(sampleRate);
     GetParam(kParamSampleRate)->Set(sampleRateRounded);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Kill all currently playing SPU voices
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::KillAllSpuVoices() noexcept {
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        Spu::Voice& voice = mSpu.pVoices[i];
+        voice.envLevel = 0;
+        voice.envPhase = Spu::EnvPhase::Off;
+    }
 }

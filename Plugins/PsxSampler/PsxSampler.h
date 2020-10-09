@@ -105,4 +105,5 @@ private:
     void DoLoadVagFilePrompt(IGraphics& graphics) noexcept;
     void SetBaseNoteFromSampleRate() noexcept;
     void SetSampleRateFromBaseNote() noexcept;
+    void KillAllSpuVoices() noexcept;
 };
