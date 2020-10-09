@@ -625,12 +625,12 @@ uint16_t PsxSampler::CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const
 // that the note was sounded with, from 0-127.
 //------------------------------------------------------------------------------------------------------------------------------------------
 Spu::Volume PsxSampler::CalcSpuVoiceVolume(const uint32_t volume, const uint32_t pan, const uint32_t velocity) noexcept {
-    const float volumeF = std::max((float) volume / 127.0f, 1.0f);
-    const float velocityF = std::max((float) velocity / 127.0f, 1.0f);
+    const float volumeF = std::min((float) volume / 127.0f, 1.0f);
+    const float velocityF = std::min((float) velocity / 127.0f, 1.0f);
     const float scaleF = volumeF * velocityF;
-    const float panF = (pan < 64) ? ((float) pan - 64.0f) / 64.0f : std::max(((float) pan - 64.0f) / 63.0f, 1.0f);
-    const float volumeLF = (1.0f - panF) / 2.0f;
-    const float volumeRF = (1.0f + panF) / 2.0f;
+    const float panF = (pan < 64) ? ((float) pan - 64.0f) / 64.0f : std::min(((float) pan - 64.0f) / 63.0f, 1.0f);
+    const float volumeLF = ((1.0f - panF) / 2.0f) * scaleF;
+    const float volumeRF = ((1.0f + panF) / 2.0f) * scaleF;
 
     return Spu::Volume{
         (int16_t) std::round(volumeLF * (float) 0x7FFF),
