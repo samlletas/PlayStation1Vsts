@@ -448,10 +448,10 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
                 default:
                     break;
             }
-        };
+        };  break;
 
         case IMidiMsg::kPitchWheel:
-            ProcessMidiPitchBend((uint16_t)((((uint16_t) msg.mData1 & 0x7Fu) << 7) | ((uint16_t) msg.mData2 & 0x7Fu)));
+            ProcessMidiPitchBend((uint16_t)((((uint16_t) msg.mData2 & 0x7Fu) << 7) | ((uint16_t) msg.mData1 & 0x7Fu)));
             break;
         
         default:
@@ -463,11 +463,8 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
 // Handle a MIDI note on message
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept {
-    // Make sure this note is not already playing - just allowed to have 1 instance
-    for (uint32_t i = 0; i < kMaxVoices; ++i) {
-        if (mVoiceInfos[i].midiNote == note)
-            return;
-    }
+    // Release any playing instances of this note that are not already being released
+    ProcessMidiNoteOff(note);
 
     // Try to find a free SPU voice firstly to service this request
     uint32_t spuVoiceIdx = UINT32_MAX;
@@ -507,18 +504,14 @@ void PsxSampler::ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) n
 // Handle a MIDI note off message
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::ProcessMidiNoteOff(const uint8_t note) noexcept {
-    // Try to find which voice for this note
+    // Find voices playing this note which are not already being released and release them
     for (uint32_t i = 0; i < kMaxVoices; ++i) {
         if (mVoiceInfos[i].midiNote == note) {
-            // Found the voice: make sure it is in the correct envelope phase to be killed off
             Spu::Voice& voice = mSpu.pVoices[i];
 
             if ((voice.envPhase != Spu::EnvPhase::Release) && (voice.envPhase != Spu::EnvPhase::Off)) {
                 Spu::keyOff(voice);
             }
-
-            // Done searching
-            break;
         }
     }
 }
