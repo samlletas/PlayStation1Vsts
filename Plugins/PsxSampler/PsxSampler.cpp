@@ -1,7 +1,9 @@
 #include "PsxSampler.h"
 
+#include "../PluginsCommon/VagUtils.h"
 #include "IPlug_include_in_plug_src.h"
-#include "LFO.h"
+
+using namespace AudioTools;
 
 static constexpr uint32_t   kSpuRamSize         = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 static constexpr int        kNumPresets         = 1;            // Not doing any actual presets for this instrument
@@ -182,7 +184,17 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColRateNoteValues = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(80.0f).GetPadded(-4.0f);
             
             pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromTop(30.0f), SplashClickActionFunc, "Save"));
-            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromBottom(30.0f), SplashClickActionFunc, "Load"));
+            pGraphics->AttachControl(
+                new IVButtonControl(
+                    bndColLoadSave.GetFromBottom(30.0f),
+                    [=](IControl* const pControl) noexcept {
+                        SplashClickActionFunc(pControl);
+                        DoLoadVagFilePrompt(*pGraphics);
+                    },
+                    "Load"
+                )
+            );
+
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromTop(30.0f), "Sample Rate", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromBottom(30.0f), "Base Note", labelStyle));
             pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), kParamSampleRate, editBoxTextStyle, editBoxBgColor, false));
@@ -480,4 +492,69 @@ float PsxSampler::GetCurrentPitchBendInNotes() const noexcept {
 
     // Figure out the semitone pitch bend and return
     return (pitchBendNormalized < 0) ? pitchBendNormalized * pitchstepDown : pitchBendNormalized * pitchstepUp;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Prompt the user to load a sample in .vag file and load it if a choice is made
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
+    // Prompt for the file to open and abort if none is chosen
+    WDL_String filePath;
+    WDL_String fileDir;
+    graphics.PromptForFile(filePath, fileDir, EFileAction::Open, "vag");
+
+    if (filePath.GetLength() <= 0)
+        return;
+
+    // Read the VAG file
+    std::vector<std::byte> adpcmData;
+    uint32_t sampleRate = {};
+    std::string loadErrorMsg;
+
+    if (!VagUtils::readVagFile(filePath.Get(), adpcmData, sampleRate, loadErrorMsg))
+        return;
+
+    // Decode to figure out where the loop points are in the VAG file
+    std::vector<int16_t> pcmSamples;
+    uint32_t loopStartSample = {};
+    uint32_t loopEndSample = {};
+    VagUtils::decodePsxAdpcmSamples(adpcmData.data(), (uint32_t) adpcmData.size(), pcmSamples, loopStartSample, loopEndSample);
+
+    // Clamp the length of the VAG file to be within the RAM size of the SPU
+    const uint32_t numAdpcmBlocks = std::min((uint32_t) adpcmData.size(), kSpuRamSize) / Spu::ADPCM_BLOCK_SIZE;
+
+    // Transfer the sound data to the SPU, terminate the sample, and update some of the sampler parameters
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
+
+    std::memcpy(mSpu.pRam, adpcmData.data(), (size_t) numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE);
+
+    GetParam(kParamSampleRate)->Set((double) sampleRate);
+    SetBaseNoteFromSampleRate();
+    GetParam(kParamLengthInSamples)->Set((double) pcmSamples.size());
+    GetParam(kParamLengthInBlocks)->Set((double) numAdpcmBlocks);
+    GetParam(kParamLoopStartSample)->Set((double) loopStartSample);
+    GetParam(kParamLoopEndSample)->Set((double) loopEndSample);
+    GetUI()->SetAllControlsDirty();
+
+    AddSampleTerminator();
+    
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Set the base note value from the sample rate
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::SetBaseNoteFromSampleRate() noexcept {
+    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+
+    if (sampleRate <= 22050.0) {
+        const double octavesDiff = std::log2(22050.0 / (double) sampleRate);
+        const double baseNote = 60.0 + octavesDiff * 12.0;
+        const double baseNoteRounded = std::round(baseNote * 256.0) / 256.0;    // Round to 1/256 increments
+        GetParam(kParamBaseNote)->Set(baseNoteRounded);
+    } else {
+        const double octavesDiff = std::log2((double) sampleRate / 22050.0);
+        const double baseNote = 60.0 - octavesDiff * 12.0;
+        const double baseNoteRounded = std::round(baseNote * 256.0) / 256.0;    // Round to 1/256 increments
+        GetParam(kParamBaseNote)->Set(baseNoteRounded);
+    }
 }

@@ -104,6 +104,9 @@
     <ClCompile Include="..\..\..\PluginsCommon\Spu.cpp">
       <Filter>PluginsCommon</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\PluginsCommon\VagUtils.cpp">
+      <Filter>PluginsCommon</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\PsxSampler.h" />
@@ -326,6 +329,30 @@
       <Filter>PluginsCommon</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\PluginsCommon\Spu.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\ByteInputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\ByteVecOutputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\Endian.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\FileInputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\FileOutputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\InputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\OutputStream.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\VagUtils.h">
       <Filter>PluginsCommon</Filter>
     </ClInclude>
   </ItemGroup>

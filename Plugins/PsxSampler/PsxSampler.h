@@ -98,4 +98,6 @@ private:
     static Spu::Volume CalcSpuVoiceVolume(const uint32_t volume, const uint32_t pan, const uint32_t velocity) noexcept;
     Spu::AdsrEnvelope GetCurrentSpuAdsrEnv() const noexcept;
     float GetCurrentPitchBendInNotes() const noexcept;
+    void DoLoadVagFilePrompt(IGraphics& graphics) noexcept;
+    void SetBaseNoteFromSampleRate() noexcept;
 };

@@ -334,9 +334,17 @@
     <ClInclude Include="..\..\..\IPlug\IPlug_include_in_plug_hdr.h" />
     <ClInclude Include="..\..\..\IPlug\IPlug_include_in_plug_src.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Asserts.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\ByteInputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\ByteVecOutputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\Endian.h" />
     <ClInclude Include="..\..\..\PluginsCommon\FatalErrors.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\FileInputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\FileOutputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\InputStream.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Macros.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\OutputStream.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Spu.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\VagUtils.h" />
     <ClInclude Include="..\PsxSampler.h" />
     <ClInclude Include="..\PsxSampler_DSP.h" />
     <ClInclude Include="..\resources\resource.h" />
@@ -425,6 +433,7 @@
     <ClCompile Include="..\..\..\IPlug\IPlugTimer.cpp" />
     <ClCompile Include="..\..\..\PluginsCommon\FatalErrors.cpp" />
     <ClCompile Include="..\..\..\PluginsCommon\Spu.cpp" />
+    <ClCompile Include="..\..\..\PluginsCommon\VagUtils.cpp" />
     <ClCompile Include="..\PsxSampler.cpp" />
   </ItemGroup>
   <ItemGroup>
