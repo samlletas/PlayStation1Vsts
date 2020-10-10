@@ -116,6 +116,7 @@ void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::DefinePluginParams() noexcept {
+    // Parameters
     GetParam(kParamSampleRate)->InitInt("sampleRate", 11025, 1, INT32_MAX, "", IParam::EFlags::kFlagMeta);          // Influences 'baseNote'
     GetParam(kParamBaseNote)->InitDouble("baseNote", 84, 0.00001, 10000.0, 0.125, "", IParam::EFlags::kFlagMeta);   // Influences 'sampleRate'
     GetParam(kParamLengthInSamples)->InitInt("lengthInSamples", 0, 0, INT32_MAX);
@@ -137,6 +138,16 @@ void PsxSampler::DefinePluginParams() noexcept {
     GetParam(kParamSustainIsExp)->InitInt("sustainIsExp", 1, 0, 1);
     GetParam(kParamReleaseShift)->InitInt("releaseShift", 0, 0, 31);
     GetParam(kParamReleaseIsExp)->InitInt("releaseIsExp", 0, 0, 1);
+
+    // Labels for switches
+    GetParam(kParamAttackIsExp)->SetDisplayText(0.0, "No");
+    GetParam(kParamAttackIsExp)->SetDisplayText(1.0, "Yes");
+    GetParam(kParamSustainDec)->SetDisplayText(0.0, "No");
+    GetParam(kParamSustainDec)->SetDisplayText(1.0, "Yes");
+    GetParam(kParamSustainIsExp)->SetDisplayText(0.0, "No");
+    GetParam(kParamSustainIsExp)->SetDisplayText(1.0, "Yes");
+    GetParam(kParamReleaseIsExp)->SetDisplayText(0.0, "No");
+    GetParam(kParamReleaseIsExp)->SetDisplayText(1.0, "Yes");
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -267,15 +278,15 @@ void PsxSampler::DoEditorSetup() noexcept {
 
             pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol2.GetFromTop(80.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetFromTop(80.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true));
         }
 
         // Add the test keyboard and pitch bend wheel
