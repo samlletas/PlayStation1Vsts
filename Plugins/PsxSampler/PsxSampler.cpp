@@ -252,7 +252,17 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColRateNoteLabels = bndPanelPadded.GetReducedFromLeft(110.0f).GetFromLeft(100.0f);
             const IRECT bndColRateNoteValues = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(80.0f).GetPadded(-4.0f);
             
-            pGraphics->AttachControl(new IVButtonControl(bndColLoadSave.GetFromTop(30.0f), SplashClickActionFunc, "Save"));
+            pGraphics->AttachControl(
+                new IVButtonControl(
+                    bndColLoadSave.GetFromTop(30.0f),
+                    [=](IControl* const pControl) noexcept {
+                        SplashClickActionFunc(pControl);
+                        DoSaveVagFilePrompt(*pGraphics);
+                    },
+                    "Save"
+                )
+            );
+
             pGraphics->AttachControl(
                 new IVButtonControl(
                     bndColLoadSave.GetFromBottom(30.0f),
@@ -777,6 +787,27 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
 
     // Kill all currently playing SPU voices
     KillAllSpuVoices();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Prompt the user to save the currently loaded sample to a .vag file and save it if a choice is made
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::DoSaveVagFilePrompt(IGraphics& graphics) noexcept {
+    // Prompt for the file to save and abort if none is chosen
+    WDL_String filePath;
+    WDL_String fileDir;
+    graphics.PromptForFile(filePath, fileDir, EFileAction::Save, "vag");
+
+    if (filePath.GetLength() <= 0)
+        return;
+
+    // Get the size of the currently loaded sound and the sample rate
+    const uint32_t numAdpcmBlocks = (uint32_t) GetParam(kParamLengthInBlocks)->Value();
+    const uint32_t numAdpcmBytes = numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE;
+    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+
+    // Save the VAG file
+    VagUtils::writePsxAdpcmSoundToVagFile(filePath.Get(), mSpu.pRam, numAdpcmBytes, sampleRate);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

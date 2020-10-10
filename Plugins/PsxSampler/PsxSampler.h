@@ -105,6 +105,7 @@ private:
     Spu::AdsrEnvelope GetCurrentSpuAdsrEnv() const noexcept;
     float GetCurrentPitchBendInNotes() const noexcept;
     void DoLoadVagFilePrompt(IGraphics& graphics) noexcept;
+    void DoSaveVagFilePrompt(IGraphics& graphics) noexcept;
     void SetBaseNoteFromSampleRate() noexcept;
     void SetSampleRateFromBaseNote() noexcept;
     void KillAllSpuVoices() noexcept;
