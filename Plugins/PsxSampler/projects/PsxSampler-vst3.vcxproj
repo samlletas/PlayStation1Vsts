@@ -361,7 +361,6 @@
     <ClInclude Include="..\..\..\PluginsCommon\Spu.h" />
     <ClInclude Include="..\..\..\PluginsCommon\VagUtils.h" />
     <ClInclude Include="..\PsxSampler.h" />
-    <ClInclude Include="..\PsxSampler_DSP.h" />
     <ClInclude Include="..\resources\resource.h" />
   </ItemGroup>
   <ItemGroup>

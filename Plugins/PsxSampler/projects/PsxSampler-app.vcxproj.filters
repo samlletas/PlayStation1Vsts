@@ -318,7 +318,6 @@
     <ClInclude Include="..\..\..\IGraphics\ISender.h">
       <Filter>IGraphics</Filter>
     </ClInclude>
-    <ClInclude Include="..\PsxSampler_DSP.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Asserts.h">
       <Filter>PluginsCommon</Filter>
     </ClInclude>
