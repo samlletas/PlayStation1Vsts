@@ -44,7 +44,7 @@ static int16_t sampleDoubleToInt16(const double origSample) noexcept {
 // Convert a sample in 16-bit format to a floating point sample
 //------------------------------------------------------------------------------------------------------------------------------------------
 static double sampleInt16ToDouble(const int16_t origSample) noexcept {
-    return (origSample < 0) ? -double(origSample) / INT16_MIN : double(origSample) / INT16_MAX;
+    return (origSample < 0) ? -double(origSample) / double(INT16_MIN) : double(origSample) / double(INT16_MAX);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
