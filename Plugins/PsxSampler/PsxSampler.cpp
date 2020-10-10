@@ -106,6 +106,43 @@ void PsxSampler::OnIdle() noexcept {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+// Serialize the VST state
+//------------------------------------------------------------------------------------------------------------------------------------------
+bool PsxSampler::SerializeState(IByteChunk& chunk) const noexcept {
+    // Serialize normal parameters
+    if (!SerializeParams(chunk))
+        return false;
+
+    // Serialize the ADPCM data for the current loaded sound
+    const uint32_t numAdpcmBlocks = (uint32_t) GetParam(kParamLengthInBlocks)->Value();
+    const uint32_t numAdpcmBytes = numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE;
+
+    if (numAdpcmBytes > 0) {
+        return (chunk.PutBytes(mSpu.pRam, (int) numAdpcmBytes) >= numAdpcmBytes);
+    }
+    
+    return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Deserialize the VST state
+//------------------------------------------------------------------------------------------------------------------------------------------
+int PsxSampler::UnserializeState(const IByteChunk& chunk, int startPos) noexcept {
+    // De-serialize normal parameters
+    startPos = UnserializeParams(chunk, startPos);
+
+    // De-serialize the ADPCM data for the previously loaded sound
+    const uint32_t numAdpcmBlocks = (uint32_t) GetParam(kParamLengthInBlocks)->Value();
+    const uint32_t numAdpcmBytes = numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE;
+
+    if (numAdpcmBytes > 0) {
+        startPos = chunk.GetBytes(mSpu.pRam, (int) numAdpcmBytes, startPos);
+    }
+    
+    return startPos;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 // Handle a MIDI message: adds it to the queue to be processed later
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::ProcessMidiMsg(const IMidiMsg& msg) noexcept {

@@ -67,6 +67,8 @@ public:
     virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
     virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;
     virtual void OnIdle() noexcept override;
+    virtual bool SerializeState(IByteChunk &chunk) const noexcept override;
+    virtual int UnserializeState(const IByteChunk &chunk, int startPos) noexcept override;
 
 private:
     // Information for a playing voice
