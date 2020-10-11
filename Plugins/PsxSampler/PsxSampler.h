@@ -90,8 +90,6 @@ private:
     void ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept;
     void ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept;
     void ProcessMidiNoteOff(const uint8_t note) noexcept;
-    void ProcessMidiVolume(const uint8_t volume) noexcept;
-    void ProcessMidiPan(const uint8_t pan) noexcept;
     void ProcessMidiPitchBend(const uint16_t pitchBend) noexcept;
     void UpdateSpuVoicesFromParams() noexcept;
     void UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept;

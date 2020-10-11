@@ -18,8 +18,8 @@ A sampler type instrument which emulates the sound of the PlayStation 1 SPU, inc
 - **Loop End Sample**: Information display: if the sound is looped, which sample the loop ends on (exclusive), otherwise 0.
 
 ## Functionality - Track
-- **Volume**: Master volume multiplier for the instrument, 0-127. A value of 127 is full volume. This setting should obey MIDI channel volume control messages also.
-- **Pan**: Master pan setting for the instrument, 0-127. A value of 64 is center, 0 is left, 127 is right. This setting should obey MIDI pan control messages also.
+- **Volume**: Master volume multiplier for the instrument, 0-127. A value of 127 is full volume.
+- **Pan**: Master pan setting for the instrument, 0-127. A value of 64 is center, 0 is left, 127 is right.
 - **Pitchstep Up**: The range of the pitch bend wheel (in notes/semitones) when pitch bending up. A value of 1 = 1 semitone, and 12 = 1 octave.
 - **Pitchstep Down**: The range of the pitch bend wheel (in notes/semitones) when pitch bending down. A value of 1 = 1 semitone, and 12 = 1 octave.
 

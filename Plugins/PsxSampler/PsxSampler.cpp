@@ -493,21 +493,6 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
             ProcessMidiNoteOff(msg.mData1 & uint8_t(0x7Fu));
             break;
 
-        case IMidiMsg::kControlChange: {
-            switch (msg.mData1) {
-                case IMidiMsg::kChannelVolume:
-                    ProcessMidiVolume(msg.mData2 & uint8_t(0x7Fu));
-                    break;
-
-                case IMidiMsg::kPan:
-                    ProcessMidiPan(msg.mData2 & uint8_t(0x7Fu));
-                    break;
-
-                default:
-                    break;
-            }
-        };  break;
-
         case IMidiMsg::kPitchWheel:
             ProcessMidiPitchBend((uint16_t)((((uint16_t) msg.mData2 & 0x7Fu) << 7) | ((uint16_t) msg.mData1 & 0x7Fu)));
             break;
@@ -572,24 +557,6 @@ void PsxSampler::ProcessMidiNoteOff(const uint8_t note) noexcept {
             }
         }
     }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-// Handle a MIDI channel volume control message
-//------------------------------------------------------------------------------------------------------------------------------------------
-void PsxSampler::ProcessMidiVolume(const uint8_t volume) noexcept {
-    GetParam(kParamVolume)->Set(volume);
-    GetUI()->SetAllControlsDirty();
-    UpdateSpuVoicesFromParams();
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-// Handle a MIDI pan control message
-//------------------------------------------------------------------------------------------------------------------------------------------
-void PsxSampler::ProcessMidiPan(const uint8_t pan) noexcept {
-    GetParam(kParamPan)->Set(pan);
-    GetUI()->SetAllControlsDirty();
-    UpdateSpuVoicesFromParams();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
