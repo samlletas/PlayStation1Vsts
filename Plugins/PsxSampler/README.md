@@ -22,6 +22,8 @@ A sampler type instrument which emulates the sound of the PlayStation 1 SPU, inc
 - **Pan**: Master pan setting for the instrument, 0-127. A value of 64 is center, 0 is left, 127 is right.
 - **Pitchstep Up**: The range of the pitch bend wheel (in notes/semitones) when pitch bending up. A value of 1 = 1 semitone, and 12 = 1 octave.
 - **Pitchstep Down**: The range of the pitch bend wheel (in notes/semitones) when pitch bending down. A value of 1 = 1 semitone, and 12 = 1 octave.
+- **Min Note**: Used to restrict the range of MIDI notes that the instrument can play. Notes outside of the min/max range will not sound.
+- **Max Note**: Used to restrict the range of MIDI notes that the instrument can play. Notes outside of the min/max range will not sound.
 
 ## Functionality - Envelope
 Note: some more in-depth details about the PlayStation SPU's ADSR envelope can be found here: http://problemkaputt.de/psx-spx.htm#spuvolumeandadsrgenerator

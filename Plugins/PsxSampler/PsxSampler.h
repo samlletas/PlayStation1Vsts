@@ -36,6 +36,8 @@ enum EParams : uint32_t {
     kParamSustainIsExp,
     kParamReleaseShift,
     kParamReleaseIsExp,
+    kParamNoteMin,
+    kParamNoteMax,
     kNumParams
 };
 
@@ -101,5 +103,6 @@ private:
     void DoSaveVagFilePrompt(IGraphics& graphics) noexcept;
     void SetBaseNoteFromSampleRate() noexcept;
     void SetSampleRateFromBaseNote() noexcept;
+    void DoNoteOffForOutOfRangeNotes() noexcept;
     void KillAllSpuVoices() noexcept;
 };

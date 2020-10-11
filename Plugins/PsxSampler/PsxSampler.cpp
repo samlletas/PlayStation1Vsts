@@ -175,6 +175,8 @@ void PsxSampler::DefinePluginParams() noexcept {
     GetParam(kParamSustainIsExp)->InitInt("sustainIsExp", 1, 0, 1);
     GetParam(kParamReleaseShift)->InitInt("releaseShift", 0, 0, 31);
     GetParam(kParamReleaseIsExp)->InitInt("releaseIsExp", 0, 0, 1);
+    GetParam(kParamNoteMin)->InitInt("noteMin", 0, 0, 127);
+    GetParam(kParamNoteMax)->InitInt("noteMax", 127, 0, 127);
 
     // Labels for switches
     GetParam(kParamAttackIsExp)->SetDisplayText(0.0, "No");
@@ -222,7 +224,7 @@ void PsxSampler::DoEditorSetup() noexcept {
         const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
         const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetFromLeft(300);
         const IRECT bndSampleInfoPanel = bndPadded.GetFromTop(80).GetReducedFromLeft(310).GetFromLeft(510);
-        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(410);
+        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(630);
         const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(200).GetFromTop(230).GetFromLeft(860);
 
         pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
@@ -305,11 +307,15 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColPan = bndPanelPadded.GetReducedFromLeft(80.0f).GetFromLeft(80.0f);
             const IRECT bndColPStepUp = bndPanelPadded.GetReducedFromLeft(160.0f).GetFromLeft(120.0f);
             const IRECT bndColPStepDown = bndPanelPadded.GetReducedFromLeft(280.0f).GetFromLeft(120.0f);
+            const IRECT bndColMinNote = bndPanelPadded.GetReducedFromLeft(400.0f).GetFromLeft(120.0f);
+            const IRECT bndColMaxNote = bndPanelPadded.GetReducedFromLeft(520.0f).GetFromLeft(120.0f);
 
             pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamVolume, "Volume", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamPan, "Pan", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColMinNote, kParamNoteMin, "Min Note", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColMaxNote, kParamNoteMax, "Max Note", DEFAULT_STYLE, true));
         }
 
         // Envelope Panel
@@ -411,6 +417,8 @@ void PsxSampler::InformHostOfParamChange(int idx, [[maybe_unused]] double normal
     } else if (idx == kParamBaseNote) {
         SetSampleRateFromBaseNote();
         GetUI()->SetAllControlsDirty();
+    } else if ((idx == kParamNoteMin) || (idx == kParamNoteMax)) {
+        DoNoteOffForOutOfRangeNotes();
     }
 
     // Update the SPU voices etc.
@@ -508,6 +516,13 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
 void PsxSampler::ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept {
     // Release any playing instances of this note that are not already being released
     ProcessMidiNoteOff(note);
+
+    // Only allow the note to be played if it's within the acceptable range
+    const uint32_t minNote = (uint32_t) GetParam(kParamNoteMin)->Value();
+    const uint32_t maxNote = (uint32_t) GetParam(kParamNoteMax)->Value();
+
+    if ((note < minNote) || (note > maxNote))
+        return;
 
     // Try to find a free SPU voice firstly to service this request
     uint32_t spuVoiceIdx = UINT32_MAX;
@@ -803,6 +818,27 @@ void PsxSampler::SetSampleRateFromBaseNote() noexcept {
     const double sampleRate = GetNoteSampleRate(GetParam(kParamBaseNote)->Value(), 22050.0, 60.0);
     const double sampleRateRounded = std::round(sampleRate);
     GetParam(kParamSampleRate)->Set(sampleRateRounded);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Do 'note off' for any notes that are now out of range according to the note min/max settings
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::DoNoteOffForOutOfRangeNotes() noexcept {
+    // Release any notes that are playing, not already releasing and which are now out of range...
+    const uint32_t minNote = (uint32_t) GetParam(kParamNoteMin)->Value();
+    const uint32_t maxNote = (uint32_t) GetParam(kParamNoteMax)->Value();
+
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        const uint16_t note = mVoiceInfos[i].midiNote;
+
+        if ((note < minNote) || (note > maxNote)) {
+            Spu::Voice& voice = mSpu.pVoices[i];
+
+            if ((voice.envPhase != Spu::EnvPhase::Release) && (voice.envPhase != Spu::EnvPhase::Off)) {
+                Spu::keyOff(voice);
+            }
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
