@@ -486,7 +486,7 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
     
     switch (statusMsgType) {
         case IMidiMsg::kNoteOn:
-            ProcessMidiNoteOn(msg.mData1 & uint8_t(0x7Fu), msg.mData1 & uint8_t(0x7Fu));
+            ProcessMidiNoteOn(msg.mData1 & uint8_t(0x7Fu), msg.mData2 & uint8_t(0x7Fu));
             break;
 
         case IMidiMsg::kNoteOff:
