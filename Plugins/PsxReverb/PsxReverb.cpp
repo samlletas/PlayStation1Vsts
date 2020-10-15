@@ -30,6 +30,14 @@ PsxReverb::PsxReverb(const InstanceInfo& info) noexcept
     #endif
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Shuts down the reverb plugin
+//------------------------------------------------------------------------------------------------------------------------------------------
+PsxReverb::~PsxReverb() noexcept {
+    Spu::destroyCore(mSpu);
+    mSpuInputSample = {};
+}
+
 #if IPLUG_DSP
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -229,6 +237,7 @@ void PsxReverb::DoEditorSetup() noexcept {
             new IVButtonControl(
                 IRECT(600, 80, 800, 110),
                 [this](IControl* pCaller){
+                    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
                     ClearReverbWorkArea();
                     pCaller->OnEndAnimation();
                 },
@@ -328,6 +337,7 @@ void PsxReverb::DoDspSetup() noexcept {
 // Called when a parameter changes
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unused]] double normalizedValue) noexcept {
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     UpdateSpuRegistersFromParams();
 
     // If changing the work area base address then clear it
@@ -341,16 +351,17 @@ void PsxReverb::InformHostOfParamChange([[maybe_unused]] int idx, [[maybe_unused
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::OnRestoreState() noexcept {
     Plugin::OnRestoreState();
+
+    // Note when switching patches stop the current reverb effect...
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     UpdateSpuRegistersFromParams();
-    ClearReverbWorkArea();  // When switching patches stop the current reverb effect
+    ClearReverbWorkArea();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Upates the value of the PlayStation SPUs reverb registers which are bound to certain parameters
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::UpdateSpuRegistersFromParams() noexcept {
-    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
-
     mSpu.masterVol.left           = (int16_t) GetParam(kMasterVolL)->Value();
     mSpu.masterVol.right          = (int16_t) GetParam(kMasterVolR)->Value();
     mSpu.extInputVol.left         = (int16_t) GetParam(kInputVolL)->Value();
@@ -397,7 +408,7 @@ void PsxReverb::UpdateSpuRegistersFromParams() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::ClearReverbWorkArea() noexcept {
     // Just clear the entire SPU ram...
-    std::memset(mSpu.pRam, 0, 512 * 1024);
+    std::memset(mSpu.pRam, 0, kSpuRamSize);
 }
 
 #endif  // #if IPLUG_DSP

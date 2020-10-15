@@ -61,6 +61,7 @@ enum EParams : uint32_t {
 class PsxReverb final : public Plugin {
 public:
     PsxReverb(const InstanceInfo& info) noexcept;
+    virtual ~PsxReverb() noexcept override;
 
     #if IPLUG_DSP
         void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
