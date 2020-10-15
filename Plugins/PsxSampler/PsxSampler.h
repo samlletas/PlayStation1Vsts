@@ -60,6 +60,7 @@ public:
     static constexpr uint32_t kMaxVoices = 24;
 
     PsxSampler(const InstanceInfo& info) noexcept;
+    virtual ~PsxSampler() noexcept override;
 
     virtual void ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept override;
     virtual void ProcessMidiMsg(const IMidiMsg& msg) noexcept override;

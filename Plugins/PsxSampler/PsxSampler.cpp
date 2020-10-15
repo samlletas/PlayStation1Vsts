@@ -55,6 +55,18 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+// Shuts down the sampler plugin
+//------------------------------------------------------------------------------------------------------------------------------------------
+PsxSampler::~PsxSampler() noexcept {
+    Spu::destroyCore(mSpu);
+    mCurMidiPitchBend = {};
+
+    for (VoiceInfo& voiceInfo : mVoiceInfos) {
+        voiceInfo = {};
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 // Does the main sound processing work of the sampler instrument
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept {
@@ -416,6 +428,8 @@ void PsxSampler::DoDspSetup() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::InformHostOfParamChange(int idx, [[maybe_unused]] double normalizedValue) noexcept {
     // These two parameters are linked
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
+
     if (idx == kParamSampleRate) {
         SetBaseNoteFromSampleRate();
         GetUI()->SetAllControlsDirty();
@@ -427,7 +441,6 @@ void PsxSampler::InformHostOfParamChange(int idx, [[maybe_unused]] double normal
     }
 
     // Update the SPU voices etc.
-    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     UpdateSpuVoicesFromParams();
 }
 
