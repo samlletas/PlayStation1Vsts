@@ -118,6 +118,7 @@ bool PsxSampler::SerializeState(IByteChunk& chunk) const noexcept {
     const uint32_t numAdpcmBytes = numAdpcmBlocks * Spu::ADPCM_BLOCK_SIZE;
 
     if (numAdpcmBytes > 0) {
+        std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
         return (chunk.PutBytes(mSpu.pRam, (int) numAdpcmBytes) >= numAdpcmBytes);
     }
     
@@ -128,6 +129,10 @@ bool PsxSampler::SerializeState(IByteChunk& chunk) const noexcept {
 // Deserialize the VST state
 //------------------------------------------------------------------------------------------------------------------------------------------
 int PsxSampler::UnserializeState(const IByteChunk& chunk, int startPos) noexcept {
+    // Make sure all Spu voices are killed and lock the SPU
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
+    KillAllSpuVoices();
+
     // De-serialize normal parameters
     startPos = UnserializeParams(chunk, startPos);
 
@@ -138,7 +143,7 @@ int PsxSampler::UnserializeState(const IByteChunk& chunk, int startPos) noexcept
     if (numAdpcmBytes > 0) {
         startPos = chunk.GetBytes(mSpu.pRam, (int) numAdpcmBytes, startPos);
     }
-    
+
     return startPos;
 }
 
@@ -501,9 +506,17 @@ void PsxSampler::ProcessQueuedMidiMsg(const IMidiMsg& msg) noexcept {
             ProcessMidiNoteOff(msg.mData1 & uint8_t(0x7Fu));
             break;
 
-        case IMidiMsg::kPitchWheel:
-            ProcessMidiPitchBend((uint16_t)((((uint16_t) msg.mData2 & 0x7Fu) << 7) | ((uint16_t) msg.mData1 & 0x7Fu)));
-            break;
+        case IMidiMsg::kPitchWheel: {
+            const uint16_t hiBits = (uint16_t) msg.mData2 & 0x7Fu;
+            const uint16_t loBits = (uint16_t) msg.mData1 & 0x7Fu;
+            ProcessMidiPitchBend((hiBits << 7) | loBits);
+        }   break;
+
+        case IMidiMsg::kControlChange: {
+            if (msg.mData1 == IMidiMsg::EControlChangeMsg::kAllNotesOff) {
+                ProcessMidiAllNotesOff();
+            }
+        }   break;
         
         default:
             break;
@@ -580,6 +593,13 @@ void PsxSampler::ProcessMidiNoteOff(const uint8_t note) noexcept {
 void PsxSampler::ProcessMidiPitchBend(const uint16_t pitchBend) noexcept {
     mCurMidiPitchBend = pitchBend;
     UpdateSpuVoicesFromParams();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Process an 'all notes off' MIDI message
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::ProcessMidiAllNotesOff() noexcept {
+    KeyOffAllSpuVoices();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -789,6 +809,7 @@ void PsxSampler::DoSaveVagFilePrompt(IGraphics& graphics) noexcept {
     const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
 
     // Save the VAG file
+    std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
     VagUtils::writePsxAdpcmSoundToVagFile(filePath.Get(), mSpu.pRam, numAdpcmBytes, sampleRate);
 }
 
@@ -842,7 +863,20 @@ void PsxSampler::DoNoteOffForOutOfRangeNotes() noexcept {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-// Kill all currently playing SPU voices
+// Keys off all currently playing SPU voices which are not already keying off
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::KeyOffAllSpuVoices() noexcept {
+    for (uint32_t i = 0; i < kMaxVoices; ++i) {
+        Spu::Voice& voice = mSpu.pVoices[i];
+
+        if ((voice.envPhase != Spu::EnvPhase::Release) && (voice.envPhase != Spu::EnvPhase::Off)) {
+            Spu::keyOff(voice);
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Kills all currently playing SPU voices
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::KillAllSpuVoices() noexcept {
     for (uint32_t i = 0; i < kMaxVoices; ++i) {

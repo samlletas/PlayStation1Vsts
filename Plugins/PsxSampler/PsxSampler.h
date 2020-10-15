@@ -75,12 +75,12 @@ private:
         uint32_t numSamplesActive;    // Number of samples the voice has been active for
     };
 
-    Spu::Core               mSpu;
-    std::recursive_mutex    mSpuMutex;
-    uint32_t                mCurMidiPitchBend;        // Current MIDI pitch bend value, a 14-bit value: 0x2000 = center, 0x0000 = lowest, 0x3FFF = highest
-    VoiceInfo               mVoiceInfos[kMaxVoices];
-    IPeakSender<2>          mMeterSender;
-    IMidiQueue              mMidiQueue;
+    Spu::Core                       mSpu;
+    mutable std::recursive_mutex    mSpuMutex;
+    uint32_t                        mCurMidiPitchBend;        // Current MIDI pitch bend value, a 14-bit value: 0x2000 = center, 0x0000 = lowest, 0x3FFF = highest
+    VoiceInfo                       mVoiceInfos[kMaxVoices];
+    IPeakSender<2>                  mMeterSender;
+    IMidiQueue                      mMidiQueue;
 
     void DefinePluginParams() noexcept;
     void DoEditorSetup() noexcept;
@@ -93,6 +93,7 @@ private:
     void ProcessMidiNoteOn(const uint8_t note, const uint8_t velocity) noexcept;
     void ProcessMidiNoteOff(const uint8_t note) noexcept;
     void ProcessMidiPitchBend(const uint16_t pitchBend) noexcept;
+    void ProcessMidiAllNotesOff() noexcept;
     void UpdateSpuVoicesFromParams() noexcept;
     void UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept;
     static uint16_t CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept;
@@ -104,5 +105,6 @@ private:
     void SetBaseNoteFromSampleRate() noexcept;
     void SetSampleRateFromBaseNote() noexcept;
     void DoNoteOffForOutOfRangeNotes() noexcept;
+    void KeyOffAllSpuVoices() noexcept;
     void KillAllSpuVoices() noexcept;
 };
