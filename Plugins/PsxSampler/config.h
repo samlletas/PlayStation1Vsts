@@ -1,7 +1,7 @@
 #define PLUG_NAME "PsxSampler"
 #define PLUG_MFR "DarraghCoy"
-#define PLUG_VERSION_HEX 0x00011000
-#define PLUG_VERSION_STR "1.1.0"
+#define PLUG_VERSION_HEX 0x00011100
+#define PLUG_VERSION_STR "1.1.1"
 #define PLUG_UNIQUE_ID 'P3u8'
 #define PLUG_MFR_ID 'DCOY'
 #define PLUG_URL_STR "https://github.com/BodbDearg/PlayStation1Vsts"
