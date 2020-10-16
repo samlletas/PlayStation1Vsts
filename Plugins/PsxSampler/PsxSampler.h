@@ -38,6 +38,8 @@ enum EParams : uint32_t {
     kParamReleaseIsExp,
     kParamNoteMin,
     kParamNoteMax,
+    kParamPitchBendUpOffset,
+    kParamPitchBendDownOffset,
     kNumParams
 };
 

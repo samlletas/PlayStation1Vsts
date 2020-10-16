@@ -22,6 +22,8 @@ A sampler type instrument which emulates the sound of the PlayStation 1 SPU, inc
 - **Pan**: Master pan setting for the instrument, 0-127. A value of 64 is center, 0 is left, 127 is right.
 - **Pitchstep Up**: The range of the pitch bend wheel (in notes/semitones) when pitch bending up. A value of 1 = 1 semitone, and 12 = 1 octave.
 - **Pitchstep Down**: The range of the pitch bend wheel (in notes/semitones) when pitch bending down. A value of 1 = 1 semitone, and 12 = 1 octave.
+- **P.Bend Up Offs.**: An additional offset (in notes/semitones) to add to the pitch when pitch bending upwards. This value is unaffected by the pitchstep also. Mostly you will want to leave this as zero as it can cause a sudden jump in pitch. The pitch bend offset fields are provided to help replicate music from PSX Doom, because its sequencer system has a bug where pitch shifting down results in an additional shift downwards of 1 semitone. 
+- **P.Bend Down Offs.**: An additional offset (in notes/semitones) to subtract from the pitch when pitch bending downwards. This value is unaffected by the pitchstep also. Mostly you will want to leave this as zero as it can cause a sudden jump in pitch. The pitch bend offset fields are provided to help replicate music from PSX Doom, because its sequencer system has a bug where pitch shifting down results in an additional shift downwards of 1 semitone. 
 - **Min Note**: Used to restrict the range of MIDI notes that the instrument can play. Notes outside of the min/max range will not sound.
 - **Max Note**: Used to restrict the range of MIDI notes that the instrument can play. Notes outside of the min/max range will not sound.
 

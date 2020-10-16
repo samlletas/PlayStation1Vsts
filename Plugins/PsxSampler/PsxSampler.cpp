@@ -179,8 +179,8 @@ void PsxSampler::DefinePluginParams() noexcept {
     GetParam(kParamLoopEndSample)->InitInt("loopEndSample", 0, 0, INT32_MAX);
     GetParam(kParamVolume)->InitInt("volume", 127, 0, 127);
     GetParam(kParamPan)->InitInt("pan", 64, 0, 127);
-    GetParam(kParamPitchstepUp)->InitInt("pitchstepUp", 1, 0, 36);
-    GetParam(kParamPitchstepDown)->InitInt("pitchstepDown", 1, 0, 36);
+    GetParam(kParamPitchstepUp)->InitInt("pitchstepUp", 1, 0, 48);
+    GetParam(kParamPitchstepDown)->InitInt("pitchstepDown", 1, 0, 48);
     GetParam(kParamAttackStep)->InitInt("attackStep", 3, 0, 3);
     GetParam(kParamAttackShift)->InitInt("attackShift", 0, 0, 31);
     GetParam(kParamAttackIsExp)->InitInt("attackIsExp", 0, 0, 1);
@@ -194,6 +194,8 @@ void PsxSampler::DefinePluginParams() noexcept {
     GetParam(kParamReleaseIsExp)->InitInt("releaseIsExp", 0, 0, 1);
     GetParam(kParamNoteMin)->InitInt("noteMin", 0, 0, 127);
     GetParam(kParamNoteMax)->InitInt("noteMax", 127, 0, 127);
+    GetParam(kParamPitchBendUpOffset)->InitDouble("pitchBendUpOffset", 0, 0, 48.0, 0.25);
+    GetParam(kParamPitchBendDownOffset)->InitDouble("pitchBendDownOffset", 0, 0, 48.0, 0.25);
 
     // Labels for switches
     GetParam(kParamAttackIsExp)->SetDisplayText(0.0, "No");
@@ -241,7 +243,7 @@ void PsxSampler::DoEditorSetup() noexcept {
         const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
         const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetFromLeft(300);
         const IRECT bndSampleInfoPanel = bndPadded.GetFromTop(80).GetReducedFromLeft(310).GetFromLeft(510);
-        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(630);
+        const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(820);
         const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(200).GetFromTop(230).GetFromLeft(860);
 
         pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
@@ -322,15 +324,19 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndPanelPadded = bndTrackPanel.GetReducedFromTop(24.0f).GetReducedFromBottom(4.0f);
             const IRECT bndColVol = bndPanelPadded.GetFromLeft(80.0f);
             const IRECT bndColPan = bndPanelPadded.GetReducedFromLeft(80.0f).GetFromLeft(80.0f);
-            const IRECT bndColPStepUp = bndPanelPadded.GetReducedFromLeft(160.0f).GetFromLeft(120.0f);
-            const IRECT bndColPStepDown = bndPanelPadded.GetReducedFromLeft(280.0f).GetFromLeft(120.0f);
-            const IRECT bndColMinNote = bndPanelPadded.GetReducedFromLeft(400.0f).GetFromLeft(120.0f);
-            const IRECT bndColMaxNote = bndPanelPadded.GetReducedFromLeft(520.0f).GetFromLeft(120.0f);
+            const IRECT bndColPStepUp = bndPanelPadded.GetReducedFromLeft(150.0f).GetFromLeft(120.0f);
+            const IRECT bndColPStepDown = bndPanelPadded.GetReducedFromLeft(270.0f).GetFromLeft(120.0f);
+            const IRECT bndColPStepUpOffs = bndPanelPadded.GetReducedFromLeft(390.0f).GetFromLeft(120.0f);
+            const IRECT bndColPStepDownOffs = bndPanelPadded.GetReducedFromLeft(520.0f).GetFromLeft(120.0f);
+            const IRECT bndColMinNote = bndPanelPadded.GetReducedFromLeft(650.0f).GetFromLeft(80.0f);
+            const IRECT bndColMaxNote = bndPanelPadded.GetReducedFromLeft(730.0f).GetFromLeft(80.0f);
 
             pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamVolume, "Volume", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamPan, "Pan", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepUpOffs, kParamPitchBendUpOffset, "P.Bend Up Offs.", DEFAULT_STYLE, true));
+            pGraphics->AttachControl(new IVKnobControl(bndColPStepDownOffs, kParamPitchBendDownOffset, "P.Bend Down Offs.", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColMinNote, kParamNoteMin, "Min Note", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndColMaxNote, kParamNoteMax, "Max Note", DEFAULT_STYLE, true));
         }
@@ -753,7 +759,17 @@ float PsxSampler::GetCurrentPitchBendInNotes() const noexcept {
         ((float) mCurMidiPitchBend - (float) PITCH_BEND_CENTER) / (float)(PITCH_BEND_CENTER - 1);
 
     // Figure out the semitone pitch bend and return
-    return (pitchBendNormalized < 0) ? pitchBendNormalized * pitchstepDown : pitchBendNormalized * pitchstepUp;
+    float pitchBendOffset = 0.0f;
+
+    if (midiPitchBend < PITCH_BEND_CENTER) {
+        pitchBendOffset -= (float) GetParam(kParamPitchBendDownOffset)->Value();
+    } else if (midiPitchBend > PITCH_BEND_CENTER) {
+        pitchBendOffset += (float) GetParam(kParamPitchBendUpOffset)->Value();
+    }
+
+    const float scaledPitchBend = (pitchBendNormalized < 0) ? pitchBendNormalized * pitchstepDown : pitchBendNormalized * pitchstepUp;
+    const float totalPitchBend = scaledPitchBend + pitchBendOffset;
+    return totalPitchBend;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
