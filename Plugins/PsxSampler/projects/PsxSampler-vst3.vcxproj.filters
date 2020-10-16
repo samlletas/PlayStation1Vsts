@@ -158,6 +158,9 @@
     <ClCompile Include="..\..\..\PluginsCommon\VagUtils.cpp">
       <Filter>PluginsCommon</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\PluginsCommon\FileUtils.cpp">
+      <Filter>PluginsCommon</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="../config.h" />
@@ -445,6 +448,15 @@
       <Filter>PluginsCommon</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\PluginsCommon\VagUtils.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\JsonUtils.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\FileUtils.h">
+      <Filter>PluginsCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\PluginsCommon\Finally.h">
       <Filter>PluginsCommon</Filter>
     </ClInclude>
   </ItemGroup>

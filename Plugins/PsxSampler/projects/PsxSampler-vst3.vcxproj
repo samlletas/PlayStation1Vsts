@@ -355,7 +355,10 @@
     <ClInclude Include="..\..\..\PluginsCommon\FatalErrors.h" />
     <ClInclude Include="..\..\..\PluginsCommon\FileInputStream.h" />
     <ClInclude Include="..\..\..\PluginsCommon\FileOutputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\FileUtils.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\Finally.h" />
     <ClInclude Include="..\..\..\PluginsCommon\InputStream.h" />
+    <ClInclude Include="..\..\..\PluginsCommon\JsonUtils.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Macros.h" />
     <ClInclude Include="..\..\..\PluginsCommon\OutputStream.h" />
     <ClInclude Include="..\..\..\PluginsCommon\Spu.h" />
@@ -449,6 +452,7 @@
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3.cpp" />
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.cpp" />
     <ClCompile Include="..\..\..\PluginsCommon\FatalErrors.cpp" />
+    <ClCompile Include="..\..\..\PluginsCommon\FileUtils.cpp" />
     <ClCompile Include="..\..\..\PluginsCommon\Spu.cpp" />
     <ClCompile Include="..\..\..\PluginsCommon\VagUtils.cpp" />
     <ClCompile Include="..\PsxSampler.cpp" />

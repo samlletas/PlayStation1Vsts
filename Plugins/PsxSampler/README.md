@@ -17,6 +17,10 @@ A sampler type instrument which emulates the sound of the PlayStation 1 SPU, inc
 - **Loop Start Sample**: Information display: if the sound is looped, which sample the loop starts on (inclusive), otherwise 0.
 - **Loop End Sample**: Information display: if the sound is looped, which sample the loop ends on (exclusive), otherwise 0.
 
+## Functionality - Params
+- **Save**: Save all of the editable parameters in the instrument except for sample data to the given json file.
+- **Load**: Load all editable parameters except sample data from the given json file. Any parameters that are not present in the json file will be left as-is in the instrument. Note that the 'sampleRate' parameter is given priority over 'baseNote' parameter, if both are in the json file - they both express the same thing in different ways.
+
 ## Functionality - Track
 - **Volume**: Master volume multiplier for the instrument, 0-127. A value of 127 is full volume.
 - **Pan**: Master pan setting for the instrument, 0-127. A value of 64 is center, 0 is left, 127 is right.

@@ -84,6 +84,10 @@ private:
     VoiceInfo                       mVoiceInfos[kMaxVoices];
     IPeakSender<2>                  mMeterSender;
     IMidiQueue                      mMidiQueue;
+    IVSlideSwitchControl*           mpSwitch_AttackIsExp;
+    IVSlideSwitchControl*           mpSwitch_SustainDec;
+    IVSlideSwitchControl*           mpSwitch_SustainIsExp;
+    IVSlideSwitchControl*           mpSwitch_ReleaseIsExp;
 
     void DefinePluginParams() noexcept;
     void DoEditorSetup() noexcept;
@@ -105,6 +109,8 @@ private:
     float GetCurrentPitchBendInNotes() const noexcept;
     void DoLoadVagFilePrompt(IGraphics& graphics) noexcept;
     void DoSaveVagFilePrompt(IGraphics& graphics) noexcept;
+    void DoLoadParamsFilePrompt(IGraphics& graphics) noexcept;
+    void DoSaveParamsFilePrompt(IGraphics& graphics) noexcept;
     void SetBaseNoteFromSampleRate() noexcept;
     void SetSampleRateFromBaseNote() noexcept;
     void DoNoteOffForOutOfRangeNotes() noexcept;

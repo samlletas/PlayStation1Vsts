@@ -1,7 +1,13 @@
 #include "PsxSampler.h"
 
+#include "../PluginsCommon/FileUtils.h"
+#include "../PluginsCommon/JsonUtils.h"
 #include "../PluginsCommon/VagUtils.h"
 #include "IPlug_include_in_plug_src.h"
+
+#include <cstdio>
+#include <rapidjson/filewritestream.h>
+#include <rapidjson/prettywriter.h>
 
 using namespace AudioTools;
 
@@ -48,6 +54,10 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     , mVoiceInfos{}
     , mMeterSender()
     , mMidiQueue()
+    , mpSwitch_AttackIsExp(nullptr)
+    , mpSwitch_SustainDec(nullptr)
+    , mpSwitch_SustainIsExp(nullptr)
+    , mpSwitch_ReleaseIsExp(nullptr)
 {
     DefinePluginParams();
     DoDspSetup();
@@ -64,6 +74,11 @@ PsxSampler::~PsxSampler() noexcept {
     for (VoiceInfo& voiceInfo : mVoiceInfos) {
         voiceInfo = {};
     }
+
+    mpSwitch_AttackIsExp = nullptr;
+    mpSwitch_SustainDec = nullptr;
+    mpSwitch_SustainIsExp = nullptr;
+    mpSwitch_ReleaseIsExp = nullptr;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -242,12 +257,14 @@ void PsxSampler::DoEditorSetup() noexcept {
         // Setup the panels
         const IRECT bndPadded = pGraphics->GetBounds().GetPadded(-10.0f);
         const IRECT bndSamplePanel = bndPadded.GetFromTop(80).GetFromLeft(300);
-        const IRECT bndSampleInfoPanel = bndPadded.GetFromTop(80).GetReducedFromLeft(310).GetFromLeft(510);
+        const IRECT bndSampleInfoPanel = bndPadded.GetFromTop(80).GetReducedFromLeft(310).GetFromLeft(400);
+        const IRECT bndParamsLoadSavePanel = bndPadded.GetFromTop(80).GetReducedFromLeft(720).GetFromLeft(100);
         const IRECT bndTrackPanel = bndPadded.GetReducedFromTop(90).GetFromTop(100).GetFromLeft(820);
         const IRECT bndEnvelopePanel = bndPadded.GetReducedFromTop(200).GetFromTop(230).GetFromLeft(860);
 
         pGraphics->AttachControl(new IVGroupControl(bndSamplePanel, "Sample"));
         pGraphics->AttachControl(new IVGroupControl(bndSampleInfoPanel, "Sample Info"));
+        pGraphics->AttachControl(new IVGroupControl(bndParamsLoadSavePanel, "Params"));
         pGraphics->AttachControl(new IVGroupControl(bndTrackPanel, "Track"));
         pGraphics->AttachControl(new IVGroupControl(bndEnvelopePanel, "Envelope"));
 
@@ -256,7 +273,7 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IText textStyle =
                 editBoxTextStyle
                 .WithFGColor(IColor(255, 255, 255, 255))
-                .WithSize(20.0f)
+                .WithSize(18.0f)
                 .WithAlign(EAlign::Near);
 
             ICaptionControl* const pCtrl = new ICaptionControl(bounds, paramIdx, textStyle, IColor(0, 0, 0, 0), false);
@@ -304,10 +321,10 @@ void PsxSampler::DoEditorSetup() noexcept {
         // Sample info panel
         {
             const IRECT bndPanelPadded = bndSampleInfoPanel.GetReducedFromTop(20.0f);
-            const IRECT bndColLengthLabels = bndPanelPadded.GetReducedFromLeft(10.0f).GetFromLeft(130.0f);
-            const IRECT bndColLengthValues = bndPanelPadded.GetReducedFromLeft(150.0f).GetFromLeft(100).GetPadded(-4.0f);
-            const IRECT bndColLoopLabels = bndPanelPadded.GetReducedFromLeft(260.0f).GetFromLeft(130.0f);
-            const IRECT bndColLoopValues = bndPanelPadded.GetReducedFromLeft(400.0f).GetFromLeft(100.0f).GetPadded(-4.0f);
+            const IRECT bndColLengthLabels = bndPanelPadded.GetReducedFromLeft(10.0f).GetFromLeft(120.0f);
+            const IRECT bndColLengthValues = bndPanelPadded.GetReducedFromLeft(130.0f).GetFromLeft(70).GetPadded(-4.0f);
+            const IRECT bndColLoopLabels = bndPanelPadded.GetReducedFromLeft(210.0f).GetFromLeft(120.0f);
+            const IRECT bndColLoopValues = bndPanelPadded.GetReducedFromLeft(330.0f).GetFromLeft(70.0f).GetPadded(-4.0f);
 
             pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromTop(30.0f), "Length (samples)", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColLengthLabels.GetFromBottom(30.0f), "Length (blocks)", labelStyle));
@@ -317,6 +334,33 @@ void PsxSampler::DoEditorSetup() noexcept {
             pGraphics->AttachControl(new IVLabelControl(bndColLoopLabels.GetFromBottom(30.0f), "Loop End Sample", labelStyle));
             pGraphics->AttachControl(makeReadOnlyEditBox(bndColLoopValues.GetFromTop(20.0f), kParamLoopStartSample));
             pGraphics->AttachControl(makeReadOnlyEditBox(bndColLoopValues.GetFromBottom(20.0f), kParamLoopEndSample));
+        }
+
+        // Params load/save panel
+        {
+            const IRECT bndPanelPadded = bndParamsLoadSavePanel.GetReducedFromTop(20.0f);
+
+            pGraphics->AttachControl(
+                new IVButtonControl(
+                    bndPanelPadded.GetFromTop(30.0f),
+                    [=](IControl* const pControl) noexcept {
+                        SplashClickActionFunc(pControl);
+                        DoSaveParamsFilePrompt(*pGraphics);
+                    },
+                    "Save"
+                )
+            );
+
+            pGraphics->AttachControl(
+                new IVButtonControl(
+                    bndPanelPadded.GetFromBottom(30.0f),
+                    [=](IControl* const pControl) noexcept {
+                        SplashClickActionFunc(pControl);
+                        DoLoadParamsFilePrompt(*pGraphics);
+                    },
+                    "Load"
+                )
+            );
         }
 
         // Track Panel
@@ -354,15 +398,20 @@ void PsxSampler::DoEditorSetup() noexcept {
 
             pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true));
+            mpSwitch_AttackIsExp = new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true);            
             pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step", DEFAULT_STYLE, true));
             pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true));
+            mpSwitch_SustainDec = new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true);            
+            mpSwitch_SustainIsExp = new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true);            
             pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVSlideSwitchControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true));
+            mpSwitch_ReleaseIsExp = new IVSlideSwitchControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true);
+
+            pGraphics->AttachControl(mpSwitch_AttackIsExp);
+            pGraphics->AttachControl(mpSwitch_SustainDec);
+            pGraphics->AttachControl(mpSwitch_SustainIsExp);
+            pGraphics->AttachControl(mpSwitch_ReleaseIsExp);
         }
 
         // Add the test keyboard and pitch bend wheel
@@ -713,7 +762,7 @@ Spu::Volume PsxSampler::CalcSpuVoiceVolume(const uint32_t volume, const uint32_t
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Get the current SPU ADSR envelope to use, based on the instrument parameters
 //------------------------------------------------------------------------------------------------------------------------------------------
-Spu::AdsrEnvelope PsxSampler::GetCurrentSpuAdsrEnv() const noexcept {  
+Spu::AdsrEnvelope PsxSampler::GetCurrentSpuAdsrEnv() const noexcept {
     const uint32_t attackStep = (uint32_t) GetParam(kParamAttackStep)->Value();
     const uint32_t attackShift = (uint32_t) GetParam(kParamAttackShift)->Value();
     const uint32_t attackIsExp = (uint32_t) GetParam(kParamAttackIsExp)->Value();
@@ -780,7 +829,7 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
     WDL_String filePath;
     WDL_String fileDir;
     graphics.PromptForFile(filePath, fileDir, EFileAction::Open, "vag");
-
+    
     if (filePath.GetLength() <= 0)
         return;
 
@@ -789,8 +838,10 @@ void PsxSampler::DoLoadVagFilePrompt(IGraphics& graphics) noexcept {
     uint32_t sampleRate = {};
     std::string loadErrorMsg;
 
-    if (!VagUtils::readVagFile(filePath.Get(), adpcmData, sampleRate, loadErrorMsg))
+    if (!VagUtils::readVagFile(filePath.Get(), adpcmData, sampleRate, loadErrorMsg)) {
+        graphics.ShowMessageBox("Unable to read the PlayStation 1 format VAG file.\nFile may be corrupt or invalid!", "Error!", EMsgBoxType::kMB_OK);
         return;
+    }
 
     // Decode to figure out where the loop points are in the VAG file
     std::vector<int16_t> pcmSamples;
@@ -839,7 +890,176 @@ void PsxSampler::DoSaveVagFilePrompt(IGraphics& graphics) noexcept {
 
     // Save the VAG file
     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
-    VagUtils::writePsxAdpcmSoundToVagFile(filePath.Get(), mSpu.pRam, numAdpcmBytes, sampleRate);
+
+    if (!VagUtils::writePsxAdpcmSoundToVagFile(filePath.Get(), mSpu.pRam, numAdpcmBytes, sampleRate)) {
+        graphics.ShowMessageBox("Unable to save to the specified .VAG file. Do you have write permissions or is the disk full?", "Error!", EMsgBoxType::kMB_OK);
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Prompt the user to load instrument parameters from a .json file and do the load if a choice is made
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::DoLoadParamsFilePrompt(IGraphics& graphics) noexcept {
+    // Prompt for the file to open and abort if none is chosen
+    WDL_String filePath;
+    WDL_String fileDir;
+    graphics.PromptForFile(filePath, fileDir, EFileAction::Open, "json");
+    
+    if (filePath.GetLength() <= 0)
+        return;
+
+    // Read the input json file and parse
+    const FileData fileData = FileUtils::getContentsOfFile(filePath.Get(), 8, std::byte(0));
+    rapidjson::Document jsonDoc;
+
+    if ((!fileData.bytes) || jsonDoc.ParseInsitu((char*) fileData.bytes.get()).HasParseError()) {
+        graphics.ShowMessageBox("Unable to read the JSON file.\nFile may be corrupt or have a parse error!", "Error!", EMsgBoxType::kMB_OK);
+        return;
+    }
+
+    // If the document root is not an object then it has nothing we are interested in
+    if (!jsonDoc.IsObject())
+        return;
+
+    // Try to read various parameters from the json.
+    // Note that we prefer to read sample rate over base note since it is more precise: both are two representations of the same thing.
+    const auto tryReadNumParam = [&, this](const char* const name, const EParams param) noexcept {
+        if (jsonDoc.HasMember(name)) {
+            const rapidjson::Value& jsonField = jsonDoc[name];
+
+            if (jsonField.IsNumber()) {
+                const double curValue = GetParam(param)->Value();
+                const double newValue = jsonField.GetDouble();
+                GetParam(param)->Set(newValue);
+            }
+        }
+    };
+
+    const auto tryReadBoolParam = [&, this](const char* const name, const EParams param) noexcept {
+        if (jsonDoc.HasMember(name)) {
+            const bool curValue = (bool)(int32_t) GetParam(param)->Value();
+            const bool newValue = JsonUtils::getOrDefault(jsonDoc, name, curValue);
+            GetParam(param)->Set(newValue ? 1 : 0);
+        }
+    };
+
+    tryReadNumParam("volume", kParamVolume);
+    tryReadNumParam("pan", kParamPan);
+    tryReadNumParam("noteMin", kParamNoteMin);
+    tryReadNumParam("noteMax", kParamNoteMax);
+    tryReadNumParam("pitchstepUp", kParamPitchstepUp);
+    tryReadNumParam("pitchstepDown", kParamPitchstepDown);
+    tryReadNumParam("pitchBendUpOffset", kParamPitchBendUpOffset);
+    tryReadNumParam("pitchBendDownOffset", kParamPitchBendDownOffset);
+    tryReadNumParam("adsr_sustainLevel", kParamSustainLevel);
+    tryReadNumParam("adsr_decayShift", kParamDecayShift);
+    tryReadNumParam("adsr_attackStep", kParamAttackStep);
+    tryReadNumParam("adsr_attackShift", kParamAttackShift);
+    tryReadBoolParam("adsr_attackExponential", kParamAttackIsExp);
+    tryReadNumParam("adsr_releaseShift", kParamReleaseShift);
+    tryReadBoolParam("adsr_releaseExponential", kParamReleaseIsExp);
+    tryReadNumParam("adsr_sustainStep", kParamSustainStep);
+    tryReadNumParam("adsr_sustainShift", kParamSustainShift);
+    tryReadBoolParam("adsr_sustainDecrease", kParamSustainDec);
+    tryReadBoolParam("adsr_sustainExponential", kParamSustainIsExp);
+
+    if (jsonDoc.HasMember("sampleRate")) {
+        tryReadNumParam("sampleRate", kParamSampleRate);
+        SetBaseNoteFromSampleRate();
+    }
+    else if (jsonDoc.HasMember("baseNote")) {
+        // This is a bit hacky: using the base note parameter as a temporary for a while here...
+        tryReadNumParam("baseNote", kParamBaseNote);
+        IParam* const pBaseNoteParam = GetParam(kParamBaseNote);
+        const double baseNote = pBaseNoteParam->Value();
+        
+        pBaseNoteParam->Set(0.0);
+        tryReadNumParam("baseNoteFrac", kParamBaseNote);
+        const double baseNoteFrac = pBaseNoteParam->Value();
+
+        GetParam(kParamBaseNote)->Set(baseNote + baseNoteFrac / 256.0);
+        SetSampleRateFromBaseNote();
+    }
+
+    // Make sure the switch toggles are in the right place
+    mpSwitch_AttackIsExp->SetValue(GetParam(kParamAttackIsExp)->Value(), 0);
+    mpSwitch_SustainDec->SetValue(GetParam(kParamSustainDec)->Value(), 0);
+    mpSwitch_SustainIsExp->SetValue(GetParam(kParamSustainIsExp)->Value(), 0);
+    mpSwitch_ReleaseIsExp->SetValue(GetParam(kParamReleaseIsExp)->Value(), 0);
+
+    // Need to refresh the UI after all this value setting
+    GetUI()->SetAllControlsDirty();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Prompt the user to save instrument parameters to a .json file and do the save if a choice is made
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxSampler::DoSaveParamsFilePrompt(IGraphics& graphics) noexcept {
+    // Prompt for the file to save and abort if none is chosen
+    WDL_String filePath;
+    WDL_String fileDir;
+    graphics.PromptForFile(filePath, fileDir, EFileAction::Save, "json");
+
+    if (filePath.GetLength() <= 0)
+        return;
+
+    // Write all of the sampler properties to the json document
+    rapidjson::Document jsonDoc;
+    jsonDoc.SetObject();
+    rapidjson::Document::AllocatorType& jsonAlloc = jsonDoc.GetAllocator();
+
+    const int32_t baseNoteF = std::round(GetParam(kParamBaseNote)->Value() * 256.0) / 256.0;    // Round to 1/256 increments
+    const int32_t baseNote = (int32_t) baseNoteF;
+    const int32_t baseNoteFrac = ((int32_t)(baseNoteF * 256.0)) % 256;
+
+    jsonDoc.AddMember("volume", (int32_t) GetParam(kParamVolume)->Value(), jsonAlloc);
+    jsonDoc.AddMember("pan", (int32_t) GetParam(kParamPan)->Value(), jsonAlloc);
+    jsonDoc.AddMember("sampleRate", (int32_t) GetParam(kParamSampleRate)->Value(), jsonAlloc);
+    jsonDoc.AddMember("baseNote", baseNote, jsonAlloc);
+    jsonDoc.AddMember("baseNoteFrac", baseNoteFrac, jsonAlloc);
+    jsonDoc.AddMember("noteMin", (int32_t) GetParam(kParamNoteMin)->Value(), jsonAlloc);
+    jsonDoc.AddMember("noteMax", (int32_t) GetParam(kParamNoteMax)->Value(), jsonAlloc);
+    jsonDoc.AddMember("pitchstepUp", (int32_t) GetParam(kParamPitchstepUp)->Value(), jsonAlloc);
+    jsonDoc.AddMember("pitchstepDown", (int32_t) GetParam(kParamPitchstepDown)->Value(), jsonAlloc);
+    jsonDoc.AddMember("pitchBendUpOffset", GetParam(kParamPitchBendUpOffset)->Value(), jsonAlloc);
+    jsonDoc.AddMember("pitchBendDownOffset", GetParam(kParamPitchBendDownOffset)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_sustainLevel", (int32_t) GetParam(kParamSustainLevel)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_decayShift", (int32_t) GetParam(kParamDecayShift)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_attackStep", (int32_t) GetParam(kParamAttackStep)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_attackShift", (int32_t) GetParam(kParamAttackShift)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_attackExponential", (bool)(int32_t) GetParam(kParamAttackIsExp)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_releaseShift", (int32_t) GetParam(kParamReleaseShift)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_releaseExponential", (bool)(int32_t) GetParam(kParamReleaseIsExp)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_sustainStep", (int32_t) GetParam(kParamSustainStep)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_sustainShift", (int32_t) GetParam(kParamSustainShift)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_sustainDecrease", (bool)(int32_t) GetParam(kParamSustainDec)->Value(), jsonAlloc);
+    jsonDoc.AddMember("adsr_sustainExponential", (bool)(int32_t) GetParam(kParamSustainIsExp)->Value(), jsonAlloc);
+
+    // Write the json to the given file
+    std::FILE* const pJsonFile = std::fopen(filePath.Get(), "w");
+    bool bFileWrittenOk = false;
+
+    if (pJsonFile) {
+        try {
+            char writeBuffer[4096];
+            rapidjson::FileWriteStream writeStream(pJsonFile, writeBuffer, sizeof(writeBuffer));
+            rapidjson::PrettyWriter<rapidjson::FileWriteStream> fileWriter(writeStream);
+            jsonDoc.Accept(fileWriter);
+            bFileWrittenOk = true;
+        } catch (...) {
+            // Ignore...
+        }
+
+        if (std::fflush(pJsonFile) != 0) {
+            bFileWrittenOk = false;
+        }
+
+        std::fclose(pJsonFile);
+    }
+
+    if (!bFileWrittenOk) {
+        graphics.ShowMessageBox("Unable to save to the specified JSON file. Do you have write permissions or is the disk full?", "Error!", EMsgBoxType::kMB_OK);
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
