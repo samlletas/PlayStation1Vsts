@@ -283,6 +283,13 @@ void PsxSampler::DoEditorSetup() noexcept {
             return pCtrl;
         };
 
+        // Make a knob control
+        const auto createAndAttachKnobControl = [=](const IRECT bounds, const int paramIdx, const char* const label) noexcept {
+            IVKnobControl* const pKnob = new IVKnobControl(bounds, paramIdx, label, DEFAULT_STYLE, true);
+            pGraphics->AttachControl(pKnob);
+            pKnob->SetMinValueTextWidth(40.0f);
+        };
+
         // Sample panel
         {
             const IRECT bndPanelPadded = bndSamplePanel.GetReducedFromTop(20.0f);
@@ -375,14 +382,14 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColMinNote = bndPanelPadded.GetReducedFromLeft(650.0f).GetFromLeft(80.0f);
             const IRECT bndColMaxNote = bndPanelPadded.GetReducedFromLeft(730.0f).GetFromLeft(80.0f);
 
-            pGraphics->AttachControl(new IVKnobControl(bndColVol, kParamVolume, "Volume", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPan, kParamPan, "Pan", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepUpOffs, kParamPitchBendUpOffset, "P.Bend Up Offs.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColPStepDownOffs, kParamPitchBendDownOffset, "P.Bend Down Offs.", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColMinNote, kParamNoteMin, "Min Note", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndColMaxNote, kParamNoteMax, "Max Note", DEFAULT_STYLE, true));
+            createAndAttachKnobControl(bndColVol, kParamVolume, "Volume");
+            createAndAttachKnobControl(bndColPan, kParamPan, "Pan");
+            createAndAttachKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up");
+            createAndAttachKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down");
+            createAndAttachKnobControl(bndColPStepUpOffs, kParamPitchBendUpOffset, "P.Bend Up Offs.");
+            createAndAttachKnobControl(bndColPStepDownOffs, kParamPitchBendDownOffset, "P.Bend Down Offs.");
+            createAndAttachKnobControl(bndColMinNote, kParamNoteMin, "Min Note");
+            createAndAttachKnobControl(bndColMaxNote, kParamNoteMax, "Max Note");
         }
 
         // Envelope Panel
@@ -396,16 +403,16 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndCol6 = bndPanelPadded.GetReducedFromLeft(600.0f).GetFromLeft(120.0f);
             const IRECT bndCol7 = bndPanelPadded.GetReducedFromLeft(720.0f).GetFromLeft(120.0f);
 
-            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift", DEFAULT_STYLE, true));
-            mpSwitch_AttackIsExp = new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true);            
-            pGraphics->AttachControl(new IVKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step", DEFAULT_STYLE, true));
-            pGraphics->AttachControl(new IVKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift", DEFAULT_STYLE, true));
-            mpSwitch_SustainDec = new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true);            
-            mpSwitch_SustainIsExp = new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true);            
-            pGraphics->AttachControl(new IVKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift", DEFAULT_STYLE, true));
+            createAndAttachKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step");
+            createAndAttachKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift");
+            mpSwitch_AttackIsExp = new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true);
+            createAndAttachKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift");
+            createAndAttachKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level");
+            createAndAttachKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step");
+            createAndAttachKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift");
+            mpSwitch_SustainDec = new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true);
+            mpSwitch_SustainIsExp = new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true);
+            createAndAttachKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift");
             mpSwitch_ReleaseIsExp = new IVSlideSwitchControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true);
 
             pGraphics->AttachControl(mpSwitch_AttackIsExp);

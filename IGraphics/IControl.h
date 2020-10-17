@@ -20,6 +20,10 @@
 #include <vector>
 #include <unordered_map>
 
+#if PSX_VST_MODS
+    #include <algorithm>
+#endif
+
 #if defined VST3_API || defined VST3C_API
 #undef stricmp
 #undef strnicmp
@@ -620,6 +624,10 @@ public:
   IVectorBase(const IVStyle& style, bool labelInWidget = false, bool valueInWidget = false)
   : mLabelInWidget(labelInWidget)
   , mValueInWidget(valueInWidget)
+// PSX VSTS: adding the ability to set a minimum width for value input boxes
+#if PSX_VST_MODS
+  , mMinValueTextWidth(0)
+#endif
   {
     SetStyle(style);
   }
@@ -983,8 +991,13 @@ public:
       if(CStringHasContents(mValueStr.Get()))
         mControl->GetUI()->MeasureText(mStyle.valueText, mValueStr.Get(), textRect);
 
-      const float valueDisplayWidth = textRect.W() * mValueDisplayFrac;
-
+      // PSX VSTS: adding the ability to set a minimum width for value input boxes
+      #if PSX_VST_MODS
+          const float valueDisplayWidth = std::max(textRect.W() * mValueDisplayFrac, mMinValueTextWidth * mValueDisplayFrac);
+      #else
+          const float valueDisplayWidth = textRect.W() * mValueDisplayFrac;
+      #endif
+       
       switch (mStyle.valueText.mVAlign)
       {
         case EVAlign::Middle:
@@ -1021,7 +1034,18 @@ public:
     
     return clickableArea;
   }
-  
+
+// PSX VSTS: adding the ability to set a minimum width for value input boxes
+#if PSX_VST_MODS
+  void SetMinValueTextWidth(const float minWidth) {
+      mMinValueTextWidth = minWidth;
+
+      if (mControl->GetUI()) {
+          MakeRects(mControl->GetRECT());
+      }
+  }
+#endif
+
 protected:
   IControl* mControl = nullptr;
   IVStyle mStyle; // IVStyle that defines certain common properties of an IVControl
@@ -1035,6 +1059,12 @@ protected:
   IRECT mWidgetBounds; // The knob/slider/button
   IRECT mLabelBounds; // A piece of text above the control
   IRECT mValueBounds; // Text below the contol, usually displaying the value of a parameter
+
+// PSX VSTS: adding the ability to set a minimum width for value input boxes
+#if PSX_VST_MODS
+  float mMinValueTextWidth;
+#endif
+
   WDL_String mLabelStr;
   WDL_String mValueStr;
   EVShape mShape = EVShape::Rectangle;
