@@ -84,9 +84,26 @@ private:
     VoiceInfo                       mVoiceInfos[kMaxVoices];
     IPeakSender<2>                  mMeterSender;
     IMidiQueue                      mMidiQueue;
+    ICaptionControl*                mpCaption_SampleRate;
+    ICaptionControl*                mpCaption_BaseNote;
+    IVKnobControl*                  mpKnob_Volume;
+    IVKnobControl*                  mpKnob_Pan;
+    IVKnobControl*                  mpKnob_PitchstepUp;
+    IVKnobControl*                  mpKnob_PitchstepDown;
+    IVKnobControl*                  mpKnob_PitchBendUpOffset;
+    IVKnobControl*                  mpKnob_PitchBendDownOffset;
+    IVKnobControl*                  mpKnob_NoteMin;
+    IVKnobControl*                  mpKnob_NoteMax;
+    IVKnobControl*                  mpKnob_AttackStep;
+    IVKnobControl*                  mpKnob_AttackShift;
     IVSlideSwitchControl*           mpSwitch_AttackIsExp;
+    IVKnobControl*                  mpKnob_DecayShift;
+    IVKnobControl*                  mpKnob_SustainLevel;
+    IVKnobControl*                  mpKnob_SustainStep;
+    IVKnobControl*                  mpKnob_SustainShift;
     IVSlideSwitchControl*           mpSwitch_SustainDec;
     IVSlideSwitchControl*           mpSwitch_SustainIsExp;
+    IVKnobControl*                  mpSwitch_ReleaseShift;
     IVSlideSwitchControl*           mpSwitch_ReleaseIsExp;
 
     void DefinePluginParams() noexcept;

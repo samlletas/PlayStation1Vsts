@@ -54,9 +54,26 @@ PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
     , mVoiceInfos{}
     , mMeterSender()
     , mMidiQueue()
+    , mpCaption_SampleRate(nullptr)
+    , mpCaption_BaseNote(nullptr)
+    , mpKnob_Volume(nullptr)
+    , mpKnob_Pan(nullptr)
+    , mpKnob_PitchstepUp(nullptr)
+    , mpKnob_PitchstepDown(nullptr)
+    , mpKnob_PitchBendUpOffset(nullptr)
+    , mpKnob_PitchBendDownOffset(nullptr)
+    , mpKnob_NoteMin(nullptr)
+    , mpKnob_NoteMax(nullptr)
+    , mpKnob_AttackStep(nullptr)
+    , mpKnob_AttackShift(nullptr)
     , mpSwitch_AttackIsExp(nullptr)
+    , mpKnob_DecayShift(nullptr)
+    , mpKnob_SustainLevel(nullptr)
+    , mpKnob_SustainStep(nullptr)
+    , mpKnob_SustainShift(nullptr)
     , mpSwitch_SustainDec(nullptr)
     , mpSwitch_SustainIsExp(nullptr)
+    , mpSwitch_ReleaseShift(nullptr)
     , mpSwitch_ReleaseIsExp(nullptr)
 {
     DefinePluginParams();
@@ -75,9 +92,26 @@ PsxSampler::~PsxSampler() noexcept {
         voiceInfo = {};
     }
 
+    mpCaption_SampleRate = nullptr;
+    mpCaption_BaseNote = nullptr;
+    mpKnob_Volume = nullptr;
+    mpKnob_Pan = nullptr;
+    mpKnob_PitchstepUp = nullptr;
+    mpKnob_PitchstepDown = nullptr;
+    mpKnob_PitchBendUpOffset = nullptr;
+    mpKnob_PitchBendDownOffset = nullptr;
+    mpKnob_NoteMin = nullptr;
+    mpKnob_NoteMax = nullptr;
+    mpKnob_AttackStep = nullptr;
+    mpKnob_AttackShift = nullptr;
     mpSwitch_AttackIsExp = nullptr;
+    mpKnob_DecayShift = nullptr;
+    mpKnob_SustainLevel = nullptr;
+    mpKnob_SustainStep = nullptr;
+    mpKnob_SustainShift = nullptr;
     mpSwitch_SustainDec = nullptr;
     mpSwitch_SustainIsExp = nullptr;
+    mpSwitch_ReleaseShift = nullptr;
     mpSwitch_ReleaseIsExp = nullptr;
 }
 
@@ -288,6 +322,7 @@ void PsxSampler::DoEditorSetup() noexcept {
             IVKnobControl* const pKnob = new IVKnobControl(bounds, paramIdx, label, DEFAULT_STYLE, true);
             pGraphics->AttachControl(pKnob);
             pKnob->SetMinValueTextWidth(40.0f);
+            return pKnob;
         };
 
         // Sample panel
@@ -321,8 +356,11 @@ void PsxSampler::DoEditorSetup() noexcept {
 
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromTop(30.0f), "Sample Rate", labelStyle));
             pGraphics->AttachControl(new IVLabelControl(bndColRateNoteLabels.GetFromBottom(30.0f), "Base Note", labelStyle));
-            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), kParamSampleRate, editBoxTextStyle, editBoxBgColor, false));
-            pGraphics->AttachControl(new ICaptionControl(bndColRateNoteValues.GetFromBottom(20.0f), kParamBaseNote, editBoxTextStyle, editBoxBgColor, false));
+            mpCaption_SampleRate = new ICaptionControl(bndColRateNoteValues.GetFromTop(20.0f), kParamSampleRate, editBoxTextStyle, editBoxBgColor, false);
+            mpCaption_BaseNote = new ICaptionControl(bndColRateNoteValues.GetFromBottom(20.0f), kParamBaseNote, editBoxTextStyle, editBoxBgColor, false);
+
+            pGraphics->AttachControl(mpCaption_SampleRate);
+            pGraphics->AttachControl(mpCaption_BaseNote);
         }
 
         // Sample info panel
@@ -382,14 +420,14 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndColMinNote = bndPanelPadded.GetReducedFromLeft(650.0f).GetFromLeft(80.0f);
             const IRECT bndColMaxNote = bndPanelPadded.GetReducedFromLeft(730.0f).GetFromLeft(80.0f);
 
-            createAndAttachKnobControl(bndColVol, kParamVolume, "Volume");
-            createAndAttachKnobControl(bndColPan, kParamPan, "Pan");
-            createAndAttachKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up");
-            createAndAttachKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down");
-            createAndAttachKnobControl(bndColPStepUpOffs, kParamPitchBendUpOffset, "P.Bend Up Offs.");
-            createAndAttachKnobControl(bndColPStepDownOffs, kParamPitchBendDownOffset, "P.Bend Down Offs.");
-            createAndAttachKnobControl(bndColMinNote, kParamNoteMin, "Min Note");
-            createAndAttachKnobControl(bndColMaxNote, kParamNoteMax, "Max Note");
+            mpKnob_Volume = createAndAttachKnobControl(bndColVol, kParamVolume, "Volume");
+            mpKnob_Pan = createAndAttachKnobControl(bndColPan, kParamPan, "Pan");
+            mpKnob_PitchstepUp = createAndAttachKnobControl(bndColPStepUp, kParamPitchstepUp, "Pitchstep Up");
+            mpKnob_PitchstepDown = createAndAttachKnobControl(bndColPStepDown, kParamPitchstepDown, "Pitchstep Down");
+            mpKnob_PitchBendUpOffset = createAndAttachKnobControl(bndColPStepUpOffs, kParamPitchBendUpOffset, "P.Bend Up Offs.");
+            mpKnob_PitchBendDownOffset = createAndAttachKnobControl(bndColPStepDownOffs, kParamPitchBendDownOffset, "P.Bend Down Offs.");
+            mpKnob_NoteMin = createAndAttachKnobControl(bndColMinNote, kParamNoteMin, "Min Note");
+            mpKnob_NoteMax = createAndAttachKnobControl(bndColMaxNote, kParamNoteMax, "Max Note");
         }
 
         // Envelope Panel
@@ -403,16 +441,16 @@ void PsxSampler::DoEditorSetup() noexcept {
             const IRECT bndCol6 = bndPanelPadded.GetReducedFromLeft(600.0f).GetFromLeft(120.0f);
             const IRECT bndCol7 = bndPanelPadded.GetReducedFromLeft(720.0f).GetFromLeft(120.0f);
 
-            createAndAttachKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step");
-            createAndAttachKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift");
+            mpKnob_AttackStep = createAndAttachKnobControl(bndCol1.GetFromTop(80.0f), kParamAttackStep, "Attack Step");
+            mpKnob_AttackShift = createAndAttachKnobControl(bndCol1.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamAttackShift, "Attack Shift");
             mpSwitch_AttackIsExp = new IVSlideSwitchControl(bndCol2.GetFromTop(60.0f), kParamAttackIsExp, "Attack Is Exp.", DEFAULT_STYLE, true);
-            createAndAttachKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift");
-            createAndAttachKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level");
-            createAndAttachKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step");
-            createAndAttachKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift");
+            mpKnob_DecayShift = createAndAttachKnobControl(bndCol3.GetFromTop(80.0f), kParamDecayShift, "Decay Shift");
+            mpKnob_SustainLevel = createAndAttachKnobControl(bndCol4.GetFromTop(80.0f), kParamSustainLevel, "Sustain Level");
+            mpKnob_SustainStep = createAndAttachKnobControl(bndCol5.GetFromTop(80.0f), kParamSustainStep, "Sustain Step");
+            mpKnob_SustainShift = createAndAttachKnobControl(bndCol5.GetReducedFromTop(100.0f).GetFromTop(80.0f), kParamSustainShift, "Sustain Shift");
             mpSwitch_SustainDec = new IVSlideSwitchControl(bndCol6.GetFromTop(60.0f), kParamSustainDec, "Sustain Dec.", DEFAULT_STYLE, true);
             mpSwitch_SustainIsExp = new IVSlideSwitchControl(bndCol6.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamSustainIsExp, "Sustain Is Exp.", DEFAULT_STYLE, true);
-            createAndAttachKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift");
+            mpSwitch_ReleaseShift = createAndAttachKnobControl(bndCol7.GetFromTop(80.0f), kParamReleaseShift, "Release Shift");
             mpSwitch_ReleaseIsExp = new IVSlideSwitchControl(bndCol7.GetReducedFromTop(100.0f).GetFromTop(60.0f), kParamReleaseIsExp, "Release Is Exp.", DEFAULT_STYLE, true);
 
             pGraphics->AttachControl(mpSwitch_AttackIsExp);
@@ -988,11 +1026,28 @@ void PsxSampler::DoLoadParamsFilePrompt(IGraphics& graphics) noexcept {
         SetSampleRateFromBaseNote();
     }
 
-    // Make sure the switch toggles are in the right place
-    mpSwitch_AttackIsExp->SetValue(GetParam(kParamAttackIsExp)->Value(), 0);
-    mpSwitch_SustainDec->SetValue(GetParam(kParamSustainDec)->Value(), 0);
-    mpSwitch_SustainIsExp->SetValue(GetParam(kParamSustainIsExp)->Value(), 0);
-    mpSwitch_ReleaseIsExp->SetValue(GetParam(kParamReleaseIsExp)->Value(), 0);
+    // Make sure all displays on the UI are up to date
+    mpCaption_SampleRate->SetValue(GetParam(kParamSampleRate)->GetNormalized());
+    mpCaption_BaseNote->SetValue(GetParam(kParamBaseNote)->GetNormalized());
+    mpKnob_Volume->SetValue(GetParam(kParamVolume)->GetNormalized());
+    mpKnob_Pan->SetValue(GetParam(kParamPan)->GetNormalized());
+    mpKnob_PitchstepUp->SetValue(GetParam(kParamPitchstepUp)->GetNormalized());
+    mpKnob_PitchstepDown->SetValue(GetParam(kParamPitchstepDown)->GetNormalized());
+    mpKnob_PitchBendUpOffset->SetValue(GetParam(kParamPitchBendUpOffset)->GetNormalized());
+    mpKnob_PitchBendDownOffset->SetValue(GetParam(kParamPitchBendDownOffset)->GetNormalized());
+    mpKnob_NoteMin->SetValue(GetParam(kParamNoteMin)->GetNormalized());
+    mpKnob_NoteMax->SetValue(GetParam(kParamNoteMax)->GetNormalized());
+    mpKnob_AttackStep->SetValue(GetParam(kParamAttackStep)->GetNormalized());
+    mpKnob_AttackShift->SetValue(GetParam(kParamAttackShift)->GetNormalized());
+    mpSwitch_AttackIsExp->SetValue(GetParam(kParamAttackIsExp)->GetNormalized());
+    mpKnob_DecayShift->SetValue(GetParam(kParamDecayShift)->GetNormalized());
+    mpKnob_SustainLevel->SetValue(GetParam(kParamSustainLevel)->GetNormalized());
+    mpKnob_SustainStep->SetValue(GetParam(kParamSustainStep)->GetNormalized());
+    mpKnob_SustainShift->SetValue(GetParam(kParamSustainShift)->GetNormalized());
+    mpSwitch_SustainDec->SetValue(GetParam(kParamSustainDec)->GetNormalized());
+    mpSwitch_SustainIsExp->SetValue(GetParam(kParamSustainIsExp)->GetNormalized());
+    mpSwitch_ReleaseShift->SetValue(GetParam(kParamReleaseShift)->GetNormalized());
+    mpSwitch_ReleaseIsExp->SetValue(GetParam(kParamReleaseIsExp)->GetNormalized());
 
     // Need to refresh the UI after all this value setting
     GetUI()->SetAllControlsDirty();
