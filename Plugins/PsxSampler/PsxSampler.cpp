@@ -13,7 +13,6 @@ using namespace AudioTools;
 
 static constexpr uint32_t   kSpuRamSize         = 512 * 1024;   // SPU RAM size: this is the size that the PS1 had
 static constexpr int        kNumPresets         = 1;            // Not doing any actual presets for this instrument
-static constexpr uint32_t   MIDI_MIDDLE_NOTE    = 60;           // The middle note in MIDI, typically assigned to 'Middle C' in some octave
 static constexpr int32_t    PITCH_BEND_CENTER   = 0x2000u;      // Pitch bend center value
 static constexpr int32_t    PITCH_BEND_MAX      = 0x3FFFu;      // Maximum pitch bend value
 
@@ -465,7 +464,7 @@ void PsxSampler::DoEditorSetup() noexcept {
         const IRECT bndPitchWheel = bndKeyboardPanel.GetFromLeft(50.0f);
 
         pGraphics->AttachControl(new IWheelControl(bndPitchWheel), kCtrlTagBender);
-        pGraphics->AttachControl(new IVKeyboardControl(bndKeyboard), kCtrlTagKeyboard);
+        pGraphics->AttachControl(new IVKeyboardControl(bndKeyboard, 36, 72), kCtrlTagKeyboard);
 
         // Add the volume meter
         const IRECT bndVolMeter = bndPadded.GetReducedFromTop(10).GetFromRight(30).GetFromTop(180);
@@ -721,7 +720,7 @@ void PsxSampler::ProcessMidiAllNotesOff() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
     // These parameters affect the pitch and volume of all voices
-    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+    const float baseNote = (float) GetParam(kParamBaseNote)->Value();
     const uint32_t volume = (uint32_t) GetParam(kParamVolume)->Value();
     const uint32_t pan = (uint32_t) GetParam(kParamPan)->Value();
 
@@ -729,7 +728,7 @@ void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
     Spu::AdsrEnvelope adsrEnv = GetCurrentSpuAdsrEnv();
     const float pitchBendInNotes = GetCurrentPitchBendInNotes();
 
-    // Update all the voices
+    // Update all the voices: note that the base note is the note at which the sample rate is 44,100 Hz (4096.0 in SPU units) so the calculation is based on that
     const uint32_t numVoices = mSpu.numVoices;
     Spu::Voice* const pVoices = mSpu.pVoices;
 
@@ -737,7 +736,7 @@ void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
         const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
         Spu::Voice& voice = pVoices[voiceIdx];
 
-        voice.sampleRate = CalcSpuVoiceSampleRate(sampleRate, (float) voiceInfo.midiNote + pitchBendInNotes);
+        voice.sampleRate = GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
         voice.bDisabled = false;
         voice.bDoReverb = false;
         voice.env = adsrEnv;
@@ -753,7 +752,7 @@ void PsxSampler::UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept {
     assert(voiceIdx < kMaxVoices);
 
     // This will affect the pitch and volume of the voice
-    const uint32_t sampleRate = (uint32_t) GetParam(kParamSampleRate)->Value();
+    const float baseNote = (float) GetParam(kParamBaseNote)->Value();
     const uint32_t volume = (uint32_t) GetParam(kParamVolume)->Value();
     const uint32_t pan = (uint32_t) GetParam(kParamPan)->Value();
 
@@ -761,29 +760,15 @@ void PsxSampler::UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept {
     Spu::AdsrEnvelope adsrEnv = GetCurrentSpuAdsrEnv();
     const float pitchBendInNotes = GetCurrentPitchBendInNotes();
 
-    // Update the voice
+    // Update the voice: note that the base note is the note at which the sample rate is 44,100 Hz (4096.0 in SPU units) so the calculation is based on that
     const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
     Spu::Voice& voice = mSpu.pVoices[voiceIdx];
 
-    voice.sampleRate = CalcSpuVoiceSampleRate(sampleRate, (float) voiceInfo.midiNote + pitchBendInNotes);
+    voice.sampleRate = GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
     voice.bDisabled = false;
     voice.bDoReverb = false;
     voice.env = adsrEnv;
     voice.volume = CalcSpuVoiceVolume(volume, pan, voiceInfo.midiVelocity);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-// Compute the SPU's format for sample rate where a value of 0x1000 means 44,100 Hz, half that is 22,050 Hz and so on.
-// Computes using the sample rate of the sound (11,025 etc.) and the current note being played, which can also be fractional too.
-//------------------------------------------------------------------------------------------------------------------------------------------
-uint16_t PsxSampler::CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept {
-    // Convert the base sample rate into the SPU's scale.
-    // For the SPU a sample rate of '11025' is equal to '0x400' so compute how many '11025' units we have and then scale by '0x400' (1024)
-    const float baseSampleRateSpu = ((float) baseSampleRate / 11025.0f) * 1024.0f;
-
-    // Now figure out the SPU rate to play the note at, round and clamp
-    const float spuSampleRate = GetNoteSampleRate((float) MIDI_MIDDLE_NOTE, baseSampleRateSpu, voiceNote);
-    return (uint16_t) std::clamp<float>(std::roundf(spuSampleRate), 0.0f, UINT16_MAX);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

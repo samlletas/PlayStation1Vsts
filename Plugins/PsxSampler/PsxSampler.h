@@ -120,7 +120,6 @@ private:
     void ProcessMidiAllNotesOff() noexcept;
     void UpdateSpuVoicesFromParams() noexcept;
     void UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept;
-    static uint16_t CalcSpuVoiceSampleRate(const uint32_t baseSampleRate, const float voiceNote) noexcept;
     static Spu::Volume CalcSpuVoiceVolume(const uint32_t volume, const uint32_t pan, const uint32_t velocity) noexcept;
     Spu::AdsrEnvelope GetCurrentSpuAdsrEnv() const noexcept;
     float GetCurrentPitchBendInNotes() const noexcept;
