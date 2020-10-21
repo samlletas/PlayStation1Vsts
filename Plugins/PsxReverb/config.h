@@ -1,7 +1,7 @@
 #define PLUG_NAME "PsxReverb"
 #define PLUG_MFR "Darragh Coy"
-#define PLUG_VERSION_HEX 0x00012100
-#define PLUG_VERSION_STR "1.2.1"
+#define PLUG_VERSION_HEX 0x00012200
+#define PLUG_VERSION_STR "1.2.2"
 #define PLUG_UNIQUE_ID 'pdz8'
 #define PLUG_MFR_ID 'DCOY'
 #define PLUG_URL_STR "https://github.com/BodbDearg/PlayStation1Vsts"
