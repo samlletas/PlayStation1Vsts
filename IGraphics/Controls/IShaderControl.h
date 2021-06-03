@@ -73,9 +73,9 @@ public:
       uniform float2 uMouse;
       uniform float2 uMouseBut;
 
-      void main(float2 fragCoord, inout half4 color) {
+      half4 main(float2 fragCoord) {
        float2 pos = uMouse.xy/uDim.xy;
-       color = half4(1, 1, 1, half(pos.x));
+       return half4(pos.x, pos.y, 1, 1);
       }
     )", err);
     
@@ -144,9 +144,8 @@ public:
 
     mRTEffect = effect;
     
-    auto inputs = SkData::MakeWithoutCopy(mUniforms.data(), mRTEffect->inputSize());
+    auto inputs = SkData::MakeWithoutCopy(mUniforms.data(), mRTEffect->uniformSize());
     auto shader = mRTEffect->makeShader(std::move(inputs), nullptr, 0, nullptr, false);
-    
     mPaint.setShader(std::move(shader));
 
     return true;

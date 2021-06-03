@@ -14,7 +14,7 @@
 #import <Metal/Metal.h>
 #endif
 
-#ifdef IGRAPHICS_IMGUI
+#if defined IGRAPHICS_IMGUI
 #import <Metal/Metal.h>
 #include "imgui.h"
 #import "imgui_impl_metal.h"
@@ -621,8 +621,7 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
   #if !defined IGRAPHICS_GL && !defined IGRAPHICS_METAL
   if (mGraphics)
   {
-    if (!mGraphics->GetPlatformContext())
-      mGraphics->SetPlatformContext([self getCGContextRef]);
+    mGraphics->SetPlatformContext([self getCGContextRef]);
       
     if (mGraphics->GetPlatformContext())
     {
@@ -1069,7 +1068,7 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
 {
   IGRAPHICS_MENU_RCVR* pDummyView = [[[IGRAPHICS_MENU_RCVR alloc] initWithFrame:bounds] autorelease];
   NSMenu* pNSMenu = [[[IGRAPHICS_MENU alloc] initWithIPopupMenuAndReceiver:&menu : pDummyView] autorelease];
-  NSPoint wp = {bounds.origin.x, bounds.origin.y + 4};
+  NSPoint wp = {bounds.origin.x, bounds.origin.y + bounds.size.height + 4};
 
   [pNSMenu popUpMenuPositioningItem:nil atLocation:wp inView:self];
   
@@ -1293,7 +1292,7 @@ static void MakeCursorFromName(NSCursor*& cursor, const char *name)
 
 @end
 
-#ifdef IGRAPHICS_IMGUI
+#if defined IGRAPHICS_IMGUI
 
 @implementation IGRAPHICS_IMGUIVIEW
 {

@@ -167,12 +167,10 @@ IPlugVST2::IPlugVST2(const InstanceInfo& info, const Config& config)
 
   SetBlockSize(DEFAULT_BLOCK_SIZE);
 
-  if(config.plugHasUI)
+  if (config.plugHasUI)
   {
     mAEffect.flags |= effFlagsHasEditor;
-    mEditRect.left = mEditRect.top = 0;
-    mEditRect.right = config.plugWidth;
-    mEditRect.bottom = config.plugHeight;
+    UpdateEditRect();
   }
   
   CreateTimer();
@@ -206,23 +204,28 @@ bool IPlugVST2::EditorResize(int viewWidth, int viewHeight)
   {
     if (viewWidth != GetEditorWidth() || viewHeight != GetEditorHeight())
     {
-      mEditRect.left = mEditRect.top = 0;
-      mEditRect.right = viewWidth;
-      mEditRect.bottom = viewHeight;
-    
+      SetEditorSize(viewWidth, viewHeight);
+      UpdateEditRect();
+  
       resized = mHostCallback(&mAEffect, audioMasterSizeWindow, viewWidth, viewHeight, 0, 0.f);
     }
-    
-    SetEditorSize(viewWidth, viewHeight);
   }
 
   return resized;
+}
+
+void IPlugVST2::UpdateEditRect()
+{
+  mEditRect.left = mEditRect.top = 0;
+  mEditRect.right = GetEditorWidth();
+  mEditRect.bottom = GetEditorHeight();
 }
 
 void IPlugVST2::SetLatency(int samples)
 {
   mAEffect.initialDelay = samples;
   IPlugProcessor::SetLatency(samples);
+  mHostCallback(&mAEffect, audioMasterIOChanged, 0, 0, 0, 0.0f);
 }
 
 bool IPlugVST2::SendVSTEvent(VstEvent& event)
@@ -450,6 +453,7 @@ VstIntPtr VSTCALLBACK IPlugVST2::VSTDispatcher(AEffect *pEffect, VstInt32 opCode
     {
       if (ptr && _this->HasUI())
       {
+        _this->UpdateEditRect();
         *(ERect**) ptr = &(_this->mEditRect);
         return 1;
       }
@@ -736,14 +740,21 @@ VstIntPtr VSTCALLBACK IPlugVST2::VSTDispatcher(AEffect *pEffect, VstInt32 opCode
           _this->mHasVSTExtensions |= VSTEXT_COCKOS;
           return 0xbeef0000;
         }
-        else if (!strcmp((char*) ptr, "hasCockosViewAsConfig"))
+
+        if (!strcmp((char*) ptr, "hasCockosViewAsConfig"))
         {
           _this->mHasVSTExtensions |= VSTEXT_COCOA;
           return 0xbeef0000;
         }
-        else if (!strcmp((char*) ptr, "wantsChannelCountNotifications"))
+
+        if (!strcmp((char*) ptr, "wantsChannelCountNotifications"))
         {
           return 1;
+        }
+
+        if (!strcmp((char*)ptr, "MPE"))
+        {
+          return _this->DoesMPE() ? 1 : 0;
         }
         
         return _this->VSTCanDo((char *) ptr);

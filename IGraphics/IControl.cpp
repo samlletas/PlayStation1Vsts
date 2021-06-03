@@ -36,8 +36,7 @@ void SplashAnimationFunc(IControl* pCaller)
     return;
   }
   
-  dynamic_cast<IVectorBase*>(pCaller)->SetSplashRadius((float) progress);
-  
+  pCaller->As<IVectorBase>()->SetSplashRadius((float) progress);
   pCaller->SetDirty(false);
 };
 
@@ -49,7 +48,7 @@ void SplashClickActionFunc(IControl* pCaller)
 {
   float x, y;
   pCaller->GetUI()->GetMouseDownPoint(x, y);
-  dynamic_cast<IVectorBase*>(pCaller)->SetSplashPoint(x, y);
+  pCaller->As<IVectorBase>()->SetSplashPoint(x, y);
   pCaller->SetAnimation(SplashAnimationFunc, DEFAULT_ANIMATION_DURATION);
 }
 
@@ -115,6 +114,7 @@ void IControl::SetParamIdx(int paramIdx, int valIdx)
 {
   assert(valIdx > kNoValIdx && valIdx < NVals());
   mVals.at(valIdx).idx = paramIdx;
+  SetDirty(false);
 }
 
 const IParam* IControl::GetParam(int valIdx) const
@@ -249,20 +249,13 @@ void IControl::SetDisabled(bool disable)
 
 void IControl::OnMouseDown(float x, float y, const IMouseMod& mod)
 {
-  #ifdef PROTOOLS
-  if (mod.A)
-  {
-    SetValueToDefault(GetValIdxForPos(x, y));
-  }
-  #endif
-
   if (mod.R)
     PromptUserInput(GetValIdxForPos(x, y));
 }
 
 void IControl::OnMouseDblClick(float x, float y, const IMouseMod& mod)
 {
-  #ifdef PROTOOLS
+  #ifdef AAX_API
   PromptUserInput(GetValIdxForPos(x, y));
   #else
   SetValueToDefault(GetValIdxForPos(x, y));
@@ -466,6 +459,8 @@ void ITextControl::SetStr(const char* str)
     
     if(mSetBoundsBasedOnStr)
       SetBoundsBasedOnStr();
+    
+    SetDirty(false);
   }
 }
 
@@ -475,6 +470,8 @@ void ITextControl::SetStrFmt(int maxlen, const char* fmt, ...)
   va_start(arglist, fmt);
   mStr.SetAppendFormattedArgs(false, maxlen, fmt, arglist);
   va_end(arglist);
+  
+  SetDirty(false);
 }
 
 void ITextControl::Draw(IGraphics& g)
@@ -718,8 +715,33 @@ ISwitchControlBase::ISwitchControlBase(const IRECT& bounds, int paramIdx, IActio
 : IControl(bounds, paramIdx, aF)
 , mNumStates(numStates)
 {
-  assert(mNumStates > 1);
+  mDisabledState.Resize(numStates);
+  SetAllStatesDisabled(false);
   mDblAsSingleClick = true;
+}
+
+void ISwitchControlBase::SetAllStatesDisabled(bool disabled)
+{
+  for(int i=0; i<mNumStates; i++)
+  {
+    SetStateDisabled(i, disabled);
+  }
+  SetDirty(false);
+}
+
+void ISwitchControlBase::SetStateDisabled(int stateIdx, bool disabled)
+{
+  if(stateIdx >= 0 && stateIdx < mNumStates && mDisabledState.GetSize())
+    mDisabledState.Get()[stateIdx] = disabled;
+  
+  SetDirty(false);
+}
+
+bool ISwitchControlBase::GetStateDisabled(int stateIdx) const
+{
+  if(stateIdx >= 0 && stateIdx < mNumStates && mDisabledState.GetSize())
+    return mDisabledState.Get()[stateIdx];
+  return false;
 }
 
 void ISwitchControlBase::OnInit()
@@ -804,20 +826,7 @@ void IKnobControlBase::OnMouseDrag(float x, float y, float dX, float dY, const I
   const IParam* pParam = GetParam();
   
   if (pParam && pParam->GetStepped() && pParam->GetStep() > 0)
-  {
-    const double range = pParam->GetRange();
-    
-    if (range > 0.)
-    {
-      double l, h;
-      pParam->GetBounds(l, h);
-
-      v = l + mMouseDragValue * range;
-      v = v - std::fmod(v, pParam->GetStep());
-      v -= l;
-      v /= range;
-    }
-  }
+    v = pParam->ConstrainNormalized(mMouseDragValue);
 
   SetValue(v);
   SetDirty();
@@ -832,19 +841,13 @@ void IKnobControlBase::OnMouseWheel(float x, float y, const IMouseMod& mod, floa
   
   if (pParam && pParam->GetStepped() && pParam->GetStep() > 0)
   {
-    const double range = pParam->GetRange();
-
-    if (range > 0. && d != 0.f)
+    if (d != 0.f)
     {
-      double l, h;
-      pParam->GetBounds(l,h);
-      v = l + GetValue() * range;
       const double step = pParam->GetStep();
+
+      v = pParam->FromNormalized(v);
       v += d > 0 ? step : -step;
-      v = Clip(v, l, h);
-      v = v - std::fmod(v, step);
-      v -= l;
-      v /= range;
+      v = pParam->ToNormalized(v);
     }
   }
 
@@ -938,20 +941,7 @@ void ISliderControlBase::OnMouseDrag(float x, float y, float dX, float dY, const
   double v = mMouseDragValue;
   
   if (pParam && pParam->GetStepped() && pParam->GetStep() > 0)
-  {
-    const double range = pParam->GetRange();
-    
-    if (range > 0.)
-    {
-      double l, h;
-      pParam->GetBounds(l,h);
-
-      v = l + mMouseDragValue * range;
-      v = v - std::fmod(v, pParam->GetStep());
-      v -= l;
-      v /= range;
-    }
-  }
+    v = pParam->ConstrainNormalized(mMouseDragValue);
 
   SetValue(v);
   SetDirty(true);
@@ -966,19 +956,13 @@ void ISliderControlBase::OnMouseWheel(float x, float y, const IMouseMod& mod, fl
   
   if (pParam && pParam->GetStepped() && pParam->GetStep() > 0)
   {
-    const double range = pParam->GetRange();
-
-    if (range > 0. && d != 0.f)
+    if (d != 0.f)
     {
-      double l, h;
-      pParam->GetBounds(l,h);
-      v = l + GetValue() * range;
       const double step = pParam->GetStep();
+          
+      v = pParam->FromNormalized(v);
       v += d > 0 ? step : -step;
-      v = Clip(v, l, h);
-      v = v - std::fmod(v, step);
-      v -= l;
-      v /= range;
+      v = pParam->ToNormalized(v);
     }
   }
 
@@ -1113,7 +1097,7 @@ void IDirBrowseControlBase::ScanDirectory(const char* path, IPopupMenu& menuToAd
             WDL_String menuEntry {f};
             
             if(!mShowFileExtensions)
-              menuEntry.Set(f, (int) (a - f));
+              menuEntry.Set(f, (int) (a - f) - 1);
             
             IPopupMenu::Item* pItem = new IPopupMenu::Item(menuEntry.Get(), IPopupMenu::Item::kNoFlags, mFiles.GetSize());
             menuToAddTo.AddItem(pItem, -2 /* sort alphabetically */);

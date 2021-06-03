@@ -47,6 +47,10 @@
 #include <xmmintrin.h>
 #endif
 
+#define LIMIT_METAL_BOUNDS_SIZE(sz) \
+    if ((sz).width > 16384.0) (sz).width = 16384.0; \
+    if ((sz).height > 16384.0) (sz).height = 16384.0;
+
 static id __class_CAMetalLayer, __class_MTLRenderPassDescriptor, __class_MTLTextureDescriptor, __class_MTLRenderPipelineDescriptor, __class_MTLCompileOptions;
 static id<MTLDevice> (*__MTLCreateSystemDefaultDevice)(void);
 static id<MTLDevice> (*__CGDirectDisplayCopyCurrentMetalDevice)(CGDirectDisplayID);
@@ -581,8 +585,34 @@ static int DelegateMouseMove(NSView *view, NSEvent *theEvent)
 
 
 
+static void SendTreeViewExpandNotification(SWELL_hwndChild *par, NSNotification *notification, int action)
+{
+  NSOutlineView *sender=[notification object];
+  NMTREEVIEW nmhdr={{(HWND)sender,(UINT_PTR)[sender tag],TVN_ITEMEXPANDING},0,};
+  SWELL_DataHold *t=[[notification userInfo] valueForKey:@"NSObject"];
+  HTREEITEM hi = t ? (HTREEITEM)[t getValue] : NULL;
+  if (hi)
+  {
+    nmhdr.action=action;
+    nmhdr.itemNew.hItem=hi;
+    nmhdr.itemNew.lParam=hi->m_param;
+  }
+  if (par->m_wndproc && !par->m_hashaddestroy)
+  {
+    par->m_wndproc((HWND)par, WM_NOTIFY, (int)[sender tag], (LPARAM)&nmhdr);
+  }
+}
+
 
 @implementation SWELL_hwndChild : NSView 
+
+- (NSMenu *)textView:(NSTextView *)view
+                menu:(NSMenu *)menu
+            forEvent:(NSEvent *)event
+             atIndex:(NSUInteger)charIndex
+{
+  return [view respondsToSelector:@selector(swellWantsContextMenu)] && ![(SWELL_TextView *)view swellWantsContextMenu] ? nil : menu;
+}
 
 -(void)viewDidHide
 {
@@ -681,6 +711,28 @@ static int DelegateMouseMove(NSView *view, NSEvent *theEvent)
   if ([aTableView isKindOfClass:[SWELL_ListView class]])
   {
     SWELL_ListView *f = (SWELL_ListView *)aTableView;
+
+    const unsigned short tag = (unsigned short)[aTableView tag];
+    NMLVCUSTOMDRAW nmlv={
+      {
+        {(HWND)aTableView,(UINT_PTR)tag, NM_CUSTOMDRAW},
+        CDDS_ITEMPREPAINT,NULL, {0,0,0,0}, (DWORD)rowIndex, 0,0
+      },
+      (COLORREF)-1,
+      (COLORREF)-1,
+      f->m_cols ? f->m_cols->Find(aTableColumn) : 0
+    };
+    if (m_wndproc) m_wndproc((HWND)self,WM_NOTIFY,tag,(LPARAM)&nmlv);
+    // todo clrTextBk too
+    if (nmlv.clrText != (COLORREF)-1)
+    {
+      if ([aCell respondsToSelector:@selector(setTextColor:)])
+      {
+        [aCell setTextColor:NSColorFromCol(nmlv.clrText)];
+      }
+      return;
+    }
+
     if (f->m_selColors&&[aTableView isRowSelected:rowIndex]) 
     {
       const NSInteger cnt = [f->m_selColors count];
@@ -824,6 +876,15 @@ static int DelegateMouseMove(NSView *view, NSEvent *theEvent)
     NMCLICK nm={{(HWND)sender,(UINT_PTR)[(NSControl*)sender tag],NM_DBLCLK}, };
     m_wndproc((HWND)self,WM_NOTIFY,[(NSControl*)sender tag],(LPARAM)&nm);
   }
+}
+
+- (void)outlineViewItemWillExpand:(NSNotification*)notification
+{
+  SendTreeViewExpandNotification(self, notification, TVE_EXPAND);
+}
+- (void)outlineViewItemWillCollapse:(NSNotification*)notification
+{
+  SendTreeViewExpandNotification(self, notification, TVE_COLLAPSE);
 }
 
 - (void)outlineViewSelectionDidChange:(NSNotification *)notification
@@ -1003,6 +1064,7 @@ static int DelegateMouseMove(NSView *view, NSEvent *theEvent)
   m_metal_commandQueue=NULL;
   if (m_use_metal>0) swell_removeMetalDirty(self);
 #endif
+  SWELL_MessageQueue_Clear((HWND)self);
 
   [super dealloc];
 }
@@ -1586,6 +1648,9 @@ static int DelegateMouseMove(NSView *view, NSEvent *theEvent)
     bounds.size.width *= 2;
     bounds.size.height *= 2;
   }
+
+  LIMIT_METAL_BOUNDS_SIZE(bounds.size)
+
   CGSize oldsc = layer.drawableSize;
   if (oldsc.width != bounds.size.width || oldsc.height != bounds.size.height)
   {
@@ -2618,7 +2683,7 @@ SWELLDIALOGCOMMONIMPLEMENTS_WND(1)
 
 void EndDialog(HWND wnd, int ret)
 {   
-  if (!wnd) return;
+  if (WDL_NOT_NORMALLY(!wnd)) return;
   
   NSWindow *nswnd=NULL;
   NSView *nsview = NULL;
@@ -2673,6 +2738,7 @@ int SWELL_DialogBox(SWELL_DialogResourceIndex *reshead, const char *resid, HWND 
   {
     int ret=[box swellGetModalRetVal];
     sendSwellMessage([box contentView],WM_DESTROY,0,0);
+    [box close];
     [box release];
     [pool release];
     return ret;
@@ -3292,7 +3358,7 @@ HWND SWELL_GetAudioUnitCocoaView(HWND parent, AudioUnit aunit, AudioUnitCocoaVie
 }
 
 
-HWND SWELL_CreateCarbonWindowView(HWND viewpar, void **wref, RECT* r, bool wantcomp)  // window is created with a root control
+HWND SWELL_CreateCarbonWindowView(HWND viewpar, void **wref, const RECT* r, bool wantcomp)  // window is created with a root control
 {
   RECT wndr = *r;
   ClientToScreen(viewpar, (POINT*)&wndr);
@@ -3307,7 +3373,7 @@ HWND SWELL_CreateCarbonWindowView(HWND viewpar, void **wref, RECT* r, bool wantc
 void* SWELL_GetWindowFromCarbonWindowView(HWND cwv)
 {
   SWELL_hwndCarbonHost* w = (SWELL_hwndCarbonHost*)cwv;
-  if (w) return [w->m_cwnd windowRef];
+  if (WDL_NORMALLY(w)) return [w->m_cwnd windowRef];
   return 0;
 }
 
@@ -3315,7 +3381,7 @@ void SWELL_AddCarbonPaneToView(HWND cwv, void* pane)  // not currently used
 {
 #ifndef __LP64__
   SWELL_hwndCarbonHost* w = (SWELL_hwndCarbonHost*)cwv;
-  if (w)
+  if (WDL_NORMALLY(w))
   {
     WindowRef wndref = (WindowRef)[w->m_cwnd windowRef];
     if (wndref)
@@ -3338,7 +3404,7 @@ void SWELL_AddCarbonPaneToView(HWND cwv, void* pane)  // not currently used
 void SWELL_SetWindowFlip(HWND hwnd, bool flip)
 {
   SWELL_hwndChild * hc = (SWELL_hwndChild*)hwnd;
-  if (hc && [hc isKindOfClass:[SWELL_hwndChild class]])
+  if (WDL_NORMALLY(hc && [hc isKindOfClass:[SWELL_hwndChild class]]))
   {
     hc->m_flip = flip;
   }
@@ -3523,7 +3589,7 @@ void SWELL_FinishDragDrop()
 bool SWELL_SetGLContextToView(HWND h)
 {
   if (!h) [NSOpenGLContext clearCurrentContext];
-  else if ([(id)h isKindOfClass:[SWELL_hwndChild class]])
+  else if (WDL_NORMALLY([(id)h isKindOfClass:[SWELL_hwndChild class]]))
   {
     SWELL_hwndChild *hc = (SWELL_hwndChild*)h;
     if (hc->m_glctx)
@@ -3535,15 +3601,17 @@ bool SWELL_SetGLContextToView(HWND h)
   return false;
 }
 
-void SWELL_SetViewGL(HWND h, bool wantGL)
+void SWELL_SetViewGL(HWND h, char wantGL)
 {
-  if (h && [(id)h isKindOfClass:[SWELL_hwndChild class]])
+  if (WDL_NORMALLY(h && [(id)h isKindOfClass:[SWELL_hwndChild class]]))
   {
     SWELL_hwndChild *hc = (SWELL_hwndChild*)h;
-    if (wantGL != !!hc->m_glctx)
+    if (!!wantGL != !!hc->m_glctx)
     {
       if (wantGL) 
       {
+        if (wantGL == 2 && SWELL_GetOSXVersion()>=0x1070) [(NSView *)h setWantsBestResolutionOpenGLSurface:YES];
+
         NSOpenGLPixelFormatAttribute atr[] = { 
             (NSOpenGLPixelFormatAttribute)96/*NSOpenGLPFAAllowOfflineRenderers*/, // allows use of NSSupportsAutomaticGraphicsSwitching and no gpu-forcing
             (NSOpenGLPixelFormatAttribute)0
@@ -3568,7 +3636,7 @@ void SWELL_SetViewGL(HWND h, bool wantGL)
 
 bool SWELL_GetViewGL(HWND h)
 {
-  return h && [(id)h isKindOfClass:[SWELL_hwndChild class]] && ((SWELL_hwndChild*)h)->m_glctx;
+  return WDL_NORMALLY(h && [(id)h isKindOfClass:[SWELL_hwndChild class]]) && ((SWELL_hwndChild*)h)->m_glctx;
 }
 void DrawSwellViewRectImpl(SWELL_hwndChild *view, NSRect rect, HDC hdc, bool isMetal)
 {
@@ -4013,6 +4081,8 @@ static void SWELL_Metal_WriteTex(SWELL_hwndChild *wnd, const unsigned int *srcbu
       bounds.size.height *= 2.0;
     }
 
+    LIMIT_METAL_BOUNDS_SIZE(bounds.size)
+
     if (wnd->m_use_metal == 1) // direct
     {
       CAMetalLayer *layer = (CAMetalLayer *)[wnd layer];
@@ -4222,7 +4292,7 @@ WDL_PtrList<SWELL_hwndChild> s_mtl_dirty_list;
 int SWELL_EnableMetal(HWND hwnd, int mode)
 {
 #ifndef SWELL_NO_METAL
-  if (!hwnd || ![(id)hwnd isKindOfClass:[SWELL_hwndChild class]]) return 0;
+  if (WDL_NOT_NORMALLY(!hwnd || ![(id)hwnd isKindOfClass:[SWELL_hwndChild class]])) return 0;
 
   SWELL_hwndChild *ch = (SWELL_hwndChild *)hwnd;
   if (g_swell_nomiddleman_cocoa_override==0 && !ch->m_use_metal)

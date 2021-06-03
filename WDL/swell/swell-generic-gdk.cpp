@@ -866,6 +866,39 @@ static void OnSelectionRequestEvent(GdkEventSelection *b)
           ptr = (guchar *)str.Get();
           len = str.GetLength();
         }
+        else if (s_clipboard_setstate_fmt == urilistatom())
+        {
+          if (len > (int)sizeof(DROPFILES))
+          {
+            DROPFILES *hdr = (DROPFILES *)ptr;
+            if (WDL_NORMALLY(hdr->pFiles < (DWORD)len) &&
+                WDL_NORMALLY(!hdr->fWide) // todo deal with UTF-16
+            )
+            {
+              const char *rd = (const char *)ptr;
+              DWORD rdo = hdr->pFiles;
+              while (rdo < (DWORD)len && rd[rdo])
+              {
+                const char *fn = rd + rdo;
+                rdo += strlen(rd+rdo)+1;
+                str.Append("file://");
+                while (*fn)
+                {
+                  if (isalnum(*fn) || *fn == '.' || *fn == '_' || *fn == '-' || *fn == '/' || *fn == '#')
+                    str.Append(fn,1);
+                  else
+                    str.AppendFormatted(8,"%%%02x",*(unsigned char *)fn);
+                  fn++;
+                }
+                str.Append("\r\n");
+              }
+            }
+          }
+
+          ptr = (guchar *)str.Get();
+          len = str.GetLength();
+        }
+
 #if SWELL_TARGET_GDK == 2
         GdkWindow *pw = gdk_window_lookup(b->requestor);
         if (!pw) pw = gdk_window_foreign_new(b->requestor);
@@ -1143,6 +1176,57 @@ static void OnButtonEvent(GdkEventButton *b)
 }
 
 
+static HANDLE urilistToDropFiles(const POINT *pt, const guchar *gptr, gint sz)
+{
+  HANDLE gobj=GlobalAlloc(0,sz+sizeof(DROPFILES));
+  if (!gobj) return NULL;
+
+  DROPFILES *df=(DROPFILES*)gobj;
+  df->pFiles = sizeof(DROPFILES);
+  if (pt) df->pt = *pt;
+  else df->pt.x = df->pt.y = 0;
+
+  df->fNC=FALSE;
+  df->fWide=FALSE;
+  guchar *pout = (guchar *)(df+1);
+  const guchar *rd = gptr;
+  const guchar *rd_end = rd + sz;
+  for (;;)
+  {
+    while (rd < rd_end && *rd && isspace(*rd)) rd++;
+    if (rd >= rd_end) break;
+
+    if (rd+7 < rd_end && !strnicmp((const char *)rd,"file://",7))
+    {
+      rd += 7;
+      int c=0;
+      while (rd < rd_end && *rd && !isspace(*rd))
+      {
+        int v1,v2;
+        if (*rd == '%' && rd+2 < rd_end && (v1=hex_parse(rd[1]))>=0 && (v2=hex_parse(rd[2]))>=0)
+        {
+          *pout++ = (v1<<4) | v2;
+          rd+=3;
+        }
+        else
+        {
+          *pout++ = *rd++;
+        }
+        c++;
+      }
+      if (c) *pout++=0;
+    }
+    else
+    {
+      while (rd < rd_end && *rd && !isspace(*rd)) rd++;
+    }
+  }
+  *pout++=0;
+  *pout++=0;
+
+  return gobj;
+}
+
 static void OnSelectionNotifyEvent(GdkEventSelection *b)
 {
   HWND hwnd = swell_oswindow_to_hwnd(b->window);
@@ -1169,51 +1253,11 @@ static void OnSelectionNotifyEvent(GdkEventSelection *b)
 
     if (sz>0 && gptr)
     {
-      HANDLE gobj=GlobalAlloc(0,sz+sizeof(DROPFILES));
+      POINT pt2 = s_ddrop_pt;
+      ScreenToClient(cw,&pt2);
+      HANDLE gobj = urilistToDropFiles(&pt2,gptr,sz);
       if (gobj)
       {
-        DROPFILES *df=(DROPFILES*)gobj;
-        df->pFiles = sizeof(DROPFILES);
-        df->pt = s_ddrop_pt;
-        ScreenToClient(cw,&df->pt);
-        df->fNC=FALSE;
-        df->fWide=FALSE;
-        guchar *pout = (guchar *)(df+1);
-        const guchar *rd = gptr;
-        const guchar *rd_end = rd + sz;
-        for (;;)
-        {
-          while (rd < rd_end && *rd && isspace(*rd)) rd++;
-          if (rd >= rd_end) break;
-
-          if (rd+7 < rd_end && !strnicmp((const char *)rd,"file://",7))
-          {
-            rd += 7;
-            int c=0;
-            while (rd < rd_end && *rd && !isspace(*rd))
-            {
-              int v1,v2;
-              if (*rd == '%' && rd+2 < rd_end && (v1=hex_parse(rd[1]))>=0 && (v2=hex_parse(rd[2]))>=0)
-              {
-                *pout++ = (v1<<4) | v2;
-                rd+=3;
-              }
-              else
-              {
-                *pout++ = *rd++;
-              }
-              c++;
-            }
-            if (c) *pout++=0;
-          }
-          else
-          {
-            while (rd < rd_end && *rd && !isspace(*rd)) rd++;
-          }
-        }
-        *pout++=0;
-        *pout++=0;
-
         SendMessage(cw,WM_DROPFILES,(WPARAM)gobj,0);
         GlobalFree(gobj);
       }
@@ -1235,44 +1279,53 @@ static void OnSelectionNotifyEvent(GdkEventSelection *b)
   {
     WDL_FastString str;
     guchar *ptr = gptr;
-    if (fmt == GDK_TARGET_STRING || fmt == utf8atom())
+    if (fmt == urilistatom())
     {
-      int lastc=0;
-      while (sz-->0)
-      {
-        int c;
-        if (unitsz==32) { c = *(unsigned int *)ptr; ptr+=4; }
-        else if (unitsz==16)  { c = *(unsigned short *)ptr; ptr+=2; }
-        else c = *ptr++;
-
-        if (!c) break;
-
-        if (c == '\n' && lastc != '\r') str.Append("\r",1);
-
-        char bv[8];
-        if (fmt != GDK_TARGET_STRING)
-        {
-          bv[0] = (char) ((unsigned char)c);
-          str.Append(bv,1);
-        } 
-        else
-        {
-          WDL_MakeUTFChar(bv,c,sizeof(bv));
-          str.Append(bv);
-        }
-
-        lastc=c;
-      }
-      ptr = (guchar*)str.Get();
-      sz=str.GetLength()+1;
+      s_clipboard_getstate = urilistToDropFiles(NULL,gptr,sz);
+      if (s_clipboard_getstate)
+        s_clipboard_getstate_fmt = fmt;
     }
-    else if (unitsz>8) sz *= (unitsz/8);
-
-    s_clipboard_getstate = GlobalAlloc(0,sz);
-    if (s_clipboard_getstate)
+    else
     {
-      memcpy(s_clipboard_getstate,ptr,sz);
-      s_clipboard_getstate_fmt = fmt;
+      if (fmt == GDK_TARGET_STRING || fmt == utf8atom())
+      {
+        int lastc=0;
+        while (sz-->0)
+        {
+          int c;
+          if (unitsz==32) { c = *(unsigned int *)ptr; ptr+=4; }
+          else if (unitsz==16)  { c = *(unsigned short *)ptr; ptr+=2; }
+          else c = *ptr++;
+
+          if (!c) break;
+
+          if (c == '\n' && lastc != '\r') str.Append("\r",1);
+
+          char bv[8];
+          if (fmt != GDK_TARGET_STRING)
+          {
+            bv[0] = (char) ((unsigned char)c);
+            str.Append(bv,1);
+          }
+          else
+          {
+            WDL_MakeUTFChar(bv,c,sizeof(bv));
+            str.Append(bv);
+          }
+
+          lastc=c;
+        }
+        ptr = (guchar*)str.Get();
+        sz=str.GetLength()+1;
+      }
+      else if (unitsz>8) sz *= (unitsz/8);
+
+      s_clipboard_getstate = GlobalAlloc(0,sz);
+      if (s_clipboard_getstate)
+      {
+        memcpy(s_clipboard_getstate,ptr,sz);
+        s_clipboard_getstate_fmt = fmt;
+      }
     }
   }
   if (gptr) g_free(gptr);
@@ -1696,6 +1749,7 @@ void swell_oswindow_invalidate(HWND hwnd, const RECT *r)
 
 bool OpenClipboard(HWND hwndDlg) 
 {
+  RegisterClipboardFormat(NULL);
   s_clip_hwnd=hwndDlg ? hwndDlg : SWELL_topwindows; 
   if (s_clipboard_getstate)
   {
@@ -1758,13 +1812,14 @@ void CloseClipboard()
 
 UINT EnumClipboardFormats(UINT lastfmt)
 {
+  if (lastfmt == CF_TEXT) return CF_HDROP;
   if (!lastfmt)
   {
     // checking this causes issues (reentrancy, I suppose?)
     //if (req_clipboard(utf8atom()))
     return CF_TEXT;
   }
-  if (lastfmt == CF_TEXT) lastfmt = 0;
+  if (lastfmt == CF_HDROP) lastfmt = 0;
 
   int x=0;
   for (;;)
@@ -1779,10 +1834,13 @@ UINT EnumClipboardFormats(UINT lastfmt)
 
 HANDLE GetClipboardData(UINT type)
 {
+  RegisterClipboardFormat(NULL);
   if (type == CF_TEXT)
-  {
     return req_clipboard(utf8atom());
-  }
+
+  if (type == CF_HDROP)
+    return req_clipboard(urilistatom());
+
   return m_clip_recs.Get(type);
 }
 
@@ -1794,7 +1852,8 @@ void EmptyClipboard()
 
 void SetClipboardData(UINT type, HANDLE h)
 {
-  if (type == CF_TEXT)
+  RegisterClipboardFormat(NULL);
+  if (type == CF_TEXT || type == CF_HDROP)
   {
     if (s_clipboard_setstate) { GlobalFree(s_clipboard_setstate); s_clipboard_setstate=NULL; }
     s_clipboard_setstate_fmt=NULL;
@@ -1810,7 +1869,7 @@ void SetClipboardData(UINT type, HANDLE h)
     }
     if (w)
     {
-      s_clipboard_setstate_fmt = utf8atom();
+      s_clipboard_setstate_fmt = type == CF_HDROP ? urilistatom() : utf8atom();
       s_clipboard_setstate = h;
       gdk_selection_owner_set(w,GDK_SELECTION_CLIPBOARD,GDK_CURRENT_TIME,TRUE);
     }
@@ -1822,6 +1881,12 @@ void SetClipboardData(UINT type, HANDLE h)
 
 UINT RegisterClipboardFormat(const char *desc)
 {
+  if (!m_clip_curfmts.GetSize())
+  {
+    m_clip_curfmts.Add(strdup("SWELL__CF_TEXT"));
+    m_clip_curfmts.Add(strdup("SWELL__CF_HDROP"));
+  }
+
   if (!desc || !*desc) return 0;
   int x;
   const int n = m_clip_curfmts.GetSize();
@@ -1931,6 +1996,55 @@ static LRESULT xbridgeProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
       }
     break;
     case WM_TIMER:
+
+      if (wParam == 1010)
+      {
+        // callers can SetTimer(hwnd_container,1010,X,NULL) and have the child X window resized to fit the parent
+        // they are only resized once, but it is deferred by timer until the window is actually there.
+        // (if the window was created by another connection to the X server than ours, the window might not yet
+        // be valid on the X server).
+        bridgeState *bs = (bridgeState*)hwnd->m_private_data;
+
+        RECT r;
+        GetClientRect(hwnd,&r);
+        if (r.right>0 && r.bottom>0 && bs)
+        {
+          Window root, par, *list=NULL;
+          unsigned int nlist=0;
+          // if a plug-in created a window on a separate X11 connection, it might not be valid yet.
+          if (XQueryTree(bs->native_disp,bs->native_w,&root,&par,&list, &nlist))
+          {
+            if (!list || !nlist)
+            {
+              if (list) XFree(list);
+              return 0;
+            }
+            XSizeHints *hints = XAllocSizeHints();
+            if (hints)
+            {
+              long hints_ret=0;
+              XGetWMNormalHints(bs->native_disp,list[0],hints,&hints_ret);
+
+              if (hints->flags&PMinSize)
+              {
+                if (r.right < hints->min_width) r.right = hints->min_width;
+                if (r.bottom < hints->min_height) r.bottom = hints->min_height;
+              }
+              if (hints->flags&PMaxSize)
+              {
+                if (hints->max_width > 0 && r.right > hints->max_width) r.right = hints->max_width;
+                if (hints->max_height > 0 && r.bottom > hints->max_height) r.bottom = hints->max_height;
+              }
+              XFree(hints);
+            }
+
+            XResizeWindow(bs->native_disp,list[0],r.right,r.bottom);
+            XFree(list);
+          }
+        }
+        KillTimer(hwnd,wParam);
+      }
+
       if (wParam != 1) break;
     case WM_MOVE:
     case WM_SIZE:
@@ -2050,7 +2164,7 @@ static GdkFilterReturn filterCreateShowProc(GdkXEvent *xev, GdkEvent *event, gpo
   return GDK_FILTER_CONTINUE;
 }
 
-HWND SWELL_CreateXBridgeWindow(HWND viewpar, void **wref, RECT *r)
+HWND SWELL_CreateXBridgeWindow(HWND viewpar, void **wref, const RECT *r)
 {
   HWND hwnd = NULL;
   *wref = NULL;
@@ -2463,6 +2577,7 @@ HCURSOR SWELL_LoadCursor(const char *_idx)
         {
           getHotSpotForFile(buf,&p->hotspot);
           GdkCursor *curs = gdk_cursor_new_from_pixbuf(gdk_display_get_default(),pb,p->hotspot.x,p->hotspot.y);
+          g_object_unref(pb);
           return (p->cachedCursor = (HCURSOR) curs);
         }
       }

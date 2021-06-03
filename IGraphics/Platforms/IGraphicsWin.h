@@ -34,7 +34,7 @@ public:
   void* GetWinModuleHandle() override { return mHInstance; }
 
   void ForceEndUserEdit() override;
-  int GetPlatformWindowScale() const override { return GetScreenScale(); }
+  float GetPlatformWindowScale() const override { return GetScreenScale(); }
 
   void PlatformResize(bool parentHasResized) override;
 
@@ -159,8 +159,8 @@ private:
 
   EParamEditMsg mParamEditMsg = kNone;
   bool mShowingTooltip = false;
-  float mHiddenCursorX;
-  float mHiddenCursorY;
+  float mHiddenCursorX = 0.f;
+  float mHiddenCursorY = 0.f;
   int mTooltipIdx = -1;
 
   WDL_String mMainWndClassName;

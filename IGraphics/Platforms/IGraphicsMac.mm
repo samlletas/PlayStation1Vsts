@@ -83,14 +83,7 @@ void IGraphicsMac::CachePlatformFont(const char* fontID, const PlatformFontPtr& 
 
 float IGraphicsMac::MeasureText(const IText& text, const char* str, IRECT& bounds) const
 {
-#ifdef IGRAPHICS_LICE
-  @autoreleasepool
-  {
-    return IGRAPHICS_DRAW_CLASS::MeasureText(text, str, bounds);
-  }
-#else
   return IGRAPHICS_DRAW_CLASS::MeasureText(text, str, bounds);
-#endif
 }
 
 void* IGraphicsMac::OpenWindow(void* pParent)
@@ -135,7 +128,7 @@ void IGraphicsMac::CloseWindow()
 {
   if (mView)
   {
-#ifdef IGRAPHICS_IMGUI
+#if defined IGRAPHICS_IMGUI
     if(mImGuiView)
     {
       IGRAPHICS_IMGUIVIEW* pImGuiView = (IGRAPHICS_IMGUIVIEW*) mImGuiView;
@@ -176,7 +169,7 @@ void IGraphicsMac::PlatformResize(bool parentHasResized)
     [[NSAnimationContext currentContext] setDuration:0.0];
     [(IGRAPHICS_VIEW*) mView setFrameSize: size ];
     
-#ifdef IGRAPHICS_IMGUI
+#if defined IGRAPHICS_IMGUI && !defined IGRAPHICS_SKIA && !defined IGRAPHICS_GL
     if(mImGuiView)
       [(IGRAPHICS_IMGUIVIEW*) mImGuiView setFrameSize: size ];
 #endif
@@ -362,11 +355,11 @@ void IGraphicsMac::UpdateTooltips()
     return;
   }
 
-  auto func = [this](IControl& control)
+  auto func = [this](IControl* pControl)
   {
-    if (control.GetTooltip() && !control.IsHidden())
+    if (pControl->GetTooltip() && !pControl->IsHidden())
     {
-      IRECT pR = control.GetTargetRECT();
+      IRECT pR = pControl->GetTargetRECT();
       if (!pR.Empty())
       {
         [(IGRAPHICS_VIEW*) mView registerToolTip: pR];
@@ -630,7 +623,16 @@ bool IGraphicsMac::SetTextInClipboard(const char* str)
 
 void IGraphicsMac::CreatePlatformImGui()
 {
-#ifdef IGRAPHICS_IMGUI
+#if defined IGRAPHICS_IMGUI
+  #if defined IGRAPHICS_SKIA && IGRAPHICS_CPU
+    #define USE_IGRAPHICS_IMGUIVIEW 1
+  #elif defined IGRAPHICS_NANOVG && IGRAPHICS_METAL
+    #define USE_IGRAPHICS_IMGUIVIEW 1
+#else
+  #define USE_IGRAPHICS_IMGUIVIEW 0
+#endif
+
+#if USE_IGRAPHICS_IMGUIVIEW
   if(mView)
   {
     IGRAPHICS_VIEW* pView = (IGRAPHICS_VIEW*) mView;
@@ -640,18 +642,13 @@ void IGraphicsMac::CreatePlatformImGui()
     mImGuiView = pImGuiView;
   }
 #endif
+#endif // IGRAPHICS_IMGUI
 }
 
-#ifdef IGRAPHICS_AGG
-  #include "IGraphicsAGG.cpp"
-#elif defined IGRAPHICS_CAIRO
-  #include "IGraphicsCairo.cpp"
-#elif defined IGRAPHICS_NANOVG
+#if defined IGRAPHICS_NANOVG
   #include "IGraphicsNanoVG.cpp"
 #elif defined IGRAPHICS_SKIA
   #include "IGraphicsSkia.cpp"
-#elif defined IGRAPHICS_LICE
-  #include "IGraphicsLice.cpp"
 #else
   #error Either NO_IGRAPHICS or one and only one choice of graphics library must be defined!
 #endif
