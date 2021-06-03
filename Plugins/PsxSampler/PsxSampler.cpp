@@ -261,7 +261,7 @@ void PsxSampler::DefinePluginParams() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::DoEditorSetup() noexcept {
     mMakeGraphicsFunc = [&]() {
-        return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_HEIGHT));
+        return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
     };
 
     mLayoutFunc = [&](IGraphics* pGraphics) {
