@@ -13,8 +13,9 @@
 #define BUNDLE_MFR "Darragh Coy"
 #define BUNDLE_DOMAIN "com"
 
-#define PLUG_CHANNEL_IO "1-1 2-2"
 #define SHARED_RESOURCES_SUBPATH "PsxReverb"
+
+#define PLUG_CHANNEL_IO "1-1 2-2"
 
 #define PLUG_LATENCY 0
 #define PLUG_TYPE 0
