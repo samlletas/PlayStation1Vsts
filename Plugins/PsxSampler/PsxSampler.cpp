@@ -6,6 +6,7 @@
 #include "IPlug_include_in_plug_src.h"
 
 #include <cstdio>
+#include <cassert>
 #include <rapidjson/filewritestream.h>
 #include <rapidjson/prettywriter.h>
 
@@ -17,8 +18,117 @@ static constexpr int32_t    PITCH_BEND_CENTER   = 0x2000u;      // Pitch bend ce
 static constexpr int32_t    PITCH_BEND_MAX      = 0x3FFFu;      // Maximum pitch bend value
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+// --- COPIED FROM PSYDOOM ---
+// 
+// This table defines the sample rates for an entire octave of notes (12 semitones) in 1/16 semitone steps.
+// The first note in the octave plays at 44,100 Hz (0x1000) and the last note (the start of the next octave) at 88,200 Hz (0x2000).
+// The sample rates are in the scale/format used by the PlayStation SPU.
+// This table is used by 'LIBSPU__spu_note2pitch' to figure out the sample rate for a note to be played.
+// The sample rates are scaled appropriately depending on the octave of the note to play.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static const uint16_t OCTAVE_SAMPLE_RATES[] = {
+    0x1000, 0x100E, 0x101D, 0x102C, 0x103B, 0x104A, 0x1059, 0x1068,     // C
+    0x1078, 0x1087, 0x1096, 0x10A5, 0x10B5, 0x10C4, 0x10D4, 0x10E3,
+    0x10F3, 0x1103, 0x1113, 0x1122, 0x1132, 0x1142, 0x1152, 0x1162,     // C#
+    0x1172, 0x1182, 0x1193, 0x11A3, 0x11B3, 0x11C4, 0x11D4, 0x11E5,
+    0x11F5, 0x1206, 0x1216, 0x1227, 0x1238, 0x1249, 0x125A, 0x126B,     // D
+    0x127C, 0x128D, 0x129E, 0x12AF, 0x12C1, 0x12D2, 0x12E3, 0x12F5,
+    0x1306, 0x1318, 0x132A, 0x133C, 0x134D, 0x135F, 0x1371, 0x1383,     // D#
+    0x1395, 0x13A7, 0x13BA, 0x13CC, 0x13DE, 0x13F1, 0x1403, 0x1416,
+    0x1428, 0x143B, 0x144E, 0x1460, 0x1473, 0x1486, 0x1499, 0x14AC,     // E
+    0x14BF, 0x14D3, 0x14E6, 0x14F9, 0x150D, 0x1520, 0x1534, 0x1547,
+    0x155B, 0x156F, 0x1583, 0x1597, 0x15AB, 0x15BF, 0x15D3, 0x15E7,     // F
+    0x15FB, 0x1610, 0x1624, 0x1638, 0x164D, 0x1662, 0x1676, 0x168B,
+    0x16A0, 0x16B5, 0x16CA, 0x16DF, 0x16F4, 0x170A, 0x171F, 0x1734,     // F#
+    0x174A, 0x175F, 0x1775, 0x178B, 0x17A1, 0x17B6, 0x17CC, 0x17E2,
+    0x17F9, 0x180F, 0x1825, 0x183B, 0x1852, 0x1868, 0x187F, 0x1896,     // G
+    0x18AC, 0x18C3, 0x18DA, 0x18F1, 0x1908, 0x191F, 0x1937, 0x194E,
+    0x1965, 0x197D, 0x1995, 0x19AC, 0x19C4, 0x19DC, 0x19F4, 0x1A0C,     // G#
+    0x1A24, 0x1A3C, 0x1A55, 0x1A6D, 0x1A85, 0x1A9E, 0x1AB7, 0x1ACF,
+    0x1AE8, 0x1B01, 0x1B1A, 0x1B33, 0x1B4C, 0x1B66, 0x1B7F, 0x1B98,     // A
+    0x1BB2, 0x1BCC, 0x1BE5, 0x1BFF, 0x1C19, 0x1C33, 0x1C4D, 0x1C67,
+    0x1C82, 0x1C9C, 0x1CB7, 0x1CD1, 0x1CEC, 0x1D07, 0x1D22, 0x1D3D,     // A#
+    0x1D58, 0x1D73, 0x1D8E, 0x1DA9, 0x1DC5, 0x1DE0, 0x1DFC, 0x1E18,
+    0x1E34, 0x1E50, 0x1E6C, 0x1E88, 0x1EA4, 0x1EC1, 0x1EDD, 0x1EFA,     // B
+    0x1F16, 0x1F33, 0x1F50, 0x1F6D, 0x1F8A, 0x1FA7, 0x1FC5, 0x1FE2,
+    0x2000,                                                             // C, Next octave
+};
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// --- COPIED FROM PSYDOOM ---
+// 
+// Internal LIBSPU function which converts a musical note to a frequency that can be set on a voice.
+// The returned integer frequency is such that 4,096 units = 44,100 Hz.
+//
+// Params:
+//  baseNote:       Note at which the frequency is considered 44,100 Hz.
+//                  For example '60' would be C5 (12 semitones per octave, 1st note of 5th octave).
+//  baseNoteFrac:   Fractional offset to 'baseNote' in 1/128 units.
+//  note:           The note to get the frequency for.
+//  noteFrac:       Fractional offset to 'note' in 1/128 units.
+//------------------------------------------------------------------------------------------------------------------------------------------
+uint16_t LIBSPU__spu_note2pitch(
+    const int32_t centerNote,
+    const uint16_t centerNoteFrac,
+    const int32_t offsetNote,
+    const uint16_t offsetNoteFrac
+) noexcept {
+    // Get the fractional component of the note (which may be a semitone or more).
+    // Once we have that drop 3 bits of precision to convert from 1/128 to 1/16 semitone steps, and wrap to a fraction.
+    const int32_t noteFracUnwrapped = offsetNoteFrac + centerNoteFrac;
+    const int32_t noteFrac = (noteFracUnwrapped >> 3) & 0xF;
+
+    // Compute the note to sound relative to the center/root note which plays at 44,100 Hz.
+    // Note: also need to account for fractional note parts that are >= 1 semitone.
+    const int32_t note = offsetNote - centerNote + noteFracUnwrapped / 128;
+
+    // Compute what octave is being sounded, relative to the center/root note and the index of the note in that octave.
+    const int32_t octave = (note < 0) ? (note - 11) / 12 : note / 12;
+    const int32_t octaveStartNote = octave * 12;
+    const int32_t noteInOctave = note - octaveStartNote;
+    assert((noteInOctave >= 0) && (noteInOctave <= 11));
+
+    // Using the octave relative note, and the fractional note component (1/16 semitone steps) compute the sample rate table lookup index
+    const uint32_t lutIndex = (noteInOctave << 4) | noteFrac;
+    assert((lutIndex >= 0) && (lutIndex < 12 * 16));
+    const uint16_t baseSampleRate = OCTAVE_SAMPLE_RATES[lutIndex];
+
+    // Scale the sample rate depending on how many octaves up or down we are from the one that starts at 44,100 Hz
+    if (octave > 0) {
+        return baseSampleRate << +octave;
+    } else if (octave < 0) {
+        return baseSampleRate >> -octave;
+    } else {
+        return baseSampleRate;
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Figures out the sample rate of a given note (specified in semitones) using a reference base note (in semitones).
+// Returns the sample rate in PlayStation SPU sample rate format, such that '4096' = 44100 Hz.
+// Uses the reimplementation of PsyQ SDK 'LIBSPU__spu_note2pitch' to perform the calculation, which would have been used by PSX games.
+// This method is less precise than 'GetNoteSampleRate' but sounds more accurate as to how samples are sounded in PlayStation games.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static uint16_t GetNoteSpuSampleRate(const float baseNote, const float note) noexcept {
+    int32_t baseNoteInt = (int32_t) baseNote;
+    int32_t noteInt = (int32_t) note;
+    const uint16_t baseNoteFrac = (int32_t)(baseNote * 128.0f) & 0x7F;
+    const uint16_t noteFrac = (int32_t)(note * 128.0f) & 0x7F;
+
+    if (baseNote < 0) {
+        baseNoteInt--;
+    }
+
+    if (note < 0) {
+        noteInt--;
+    }
+
+    return LIBSPU__spu_note2pitch(baseNoteInt, baseNoteFrac, noteInt, noteFrac);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 // Figures out the sample rate of a given note (specified in semitones) using a reference base note (in semitones) and the sample
-// rate that the base note sounds at. This is similar to a utility implemented for PsyDoom in the LIBSPU module.
+// rate that the base note sounds at. This is similar to 'GetNoteSpuSampleRate' but more precise and not relying on lookup tables.
 //
 // For a good explantion of the conversion from note to frequency, see:
 //  https://www.translatorscafe.com/unit-converter/en-US/calculator/note-frequency/
@@ -730,7 +840,7 @@ void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
         const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
         Spu::Voice& voice = pVoices[voiceIdx];
 
-        voice.sampleRate = (uint16_t) GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
+        voice.sampleRate = GetNoteSpuSampleRate(baseNote, (float) voiceInfo.midiNote + pitchBendInNotes);
         voice.bDisabled = false;
         voice.bDoReverb = false;
         voice.env = adsrEnv;
@@ -758,7 +868,7 @@ void PsxSampler::UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept {
     const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
     Spu::Voice& voice = mSpu.pVoices[voiceIdx];
 
-    voice.sampleRate = (uint16_t) GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
+    voice.sampleRate = GetNoteSpuSampleRate(baseNote, (float) voiceInfo.midiNote + pitchBendInNotes);
     voice.bDisabled = false;
     voice.bDoReverb = false;
     voice.env = adsrEnv;
