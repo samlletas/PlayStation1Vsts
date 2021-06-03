@@ -41,21 +41,6 @@ PsxReverb::~PsxReverb() noexcept {
 #if IPLUG_DSP
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-// Convert a sample in double format to 16-bit
-//------------------------------------------------------------------------------------------------------------------------------------------
-static int16_t sampleDoubleToInt16(const double origSample) noexcept {
-    const double origClamped = std::clamp(origSample, -1.0, 1.0);
-    return (origClamped < 0) ? (int16_t)(-origClamped * double(INT16_MIN)) : (int16_t)(origClamped * double(INT16_MAX));
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-// Convert a sample in 16-bit format to a floating point sample
-//------------------------------------------------------------------------------------------------------------------------------------------
-static double sampleInt16ToDouble(const int16_t origSample) noexcept {
-    return (origSample < 0) ? -double(origSample) / double(INT16_MIN) : double(origSample) / double(INT16_MAX);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
 // Does the work of the reverb effect plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames) noexcept {
@@ -67,11 +52,11 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
     for (int frameIdx = 0; frameIdx < numFrames; frameIdx++) {
         // Setup the SPU input sample
         if (numChannels >= 2) {
-            mSpuInputSample.left = sampleDoubleToInt16(pInputs[0][frameIdx]);
-            mSpuInputSample.right = sampleDoubleToInt16(pInputs[1][frameIdx]);
+            mSpuInputSample.left = (float) pInputs[0][frameIdx];
+            mSpuInputSample.right = (float) pInputs[1][frameIdx];
         } else if (numChannels == 1) {
-            mSpuInputSample.left = sampleDoubleToInt16(pInputs[0][frameIdx]);
-            mSpuInputSample.right = sampleDoubleToInt16(pInputs[0][frameIdx]);
+            mSpuInputSample.left = (float) pInputs[0][frameIdx];
+            mSpuInputSample.right = (float) pInputs[0][frameIdx];
         } else {
             mSpuInputSample = {};
         }
@@ -80,10 +65,10 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
         const Spu::StereoSample soundOut = Spu::stepCore(mSpu);
 
         if (numChannels >= 2) {
-            pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
-            pOutputs[1][frameIdx] = sampleInt16ToDouble(soundOut.right);
+            pOutputs[0][frameIdx] = soundOut.left;
+            pOutputs[1][frameIdx] = soundOut.right;
         } else if (numChannels == 1) {
-            pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
+            pOutputs[0][frameIdx] = soundOut.left;
         }
     }
 }
@@ -407,8 +392,7 @@ void PsxReverb::UpdateSpuRegistersFromParams() noexcept {
 // Clears the work area for the current reverb effect, effectively silencing the current reverb
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::ClearReverbWorkArea() noexcept {
-    // Just clear the entire SPU ram...
-    std::memset(mSpu.pRam, 0, kSpuRamSize);
+    std::memset(mSpu.pReverbRam, 0, mSpu.numReverbRamSamples * sizeof(float));
 }
 
 #endif  // #if IPLUG_DSP

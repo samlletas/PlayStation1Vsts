@@ -36,13 +36,6 @@ static double GetNoteSampleRate(const double baseNote, const double baseNoteSamp
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-// Convert a sample in 16-bit format to a floating point sample
-//------------------------------------------------------------------------------------------------------------------------------------------
-static double sampleInt16ToDouble(const int16_t origSample) noexcept {
-    return (origSample < 0) ? -double(origSample) / double(INT16_MIN) : double(origSample) / double(INT16_MAX);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
 // Initializes the sampler instrument plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 PsxSampler::PsxSampler(const InstanceInfo& info) noexcept
@@ -132,10 +125,10 @@ void PsxSampler::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames
             const Spu::StereoSample soundOut = Spu::stepCore(mSpu);
 
             if (numChannels >= 2) {
-                pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
-                pOutputs[1][frameIdx] = sampleInt16ToDouble(soundOut.right);
+                pOutputs[0][frameIdx] = soundOut.left;
+                pOutputs[1][frameIdx] = soundOut.right;
             } else if (numChannels == 1) {
-                pOutputs[0][frameIdx] = sampleInt16ToDouble(soundOut.left);
+                pOutputs[0][frameIdx] = soundOut.left;
             }
         }
     }
@@ -486,8 +479,9 @@ void PsxSampler::DoEditorSetup() noexcept {
 // Setup DSP related stuff
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxSampler::DoDspSetup() noexcept {
-    // Create the PlayStation SPU core
-    Spu::initCore(mSpu, kSpuRamSize, kMaxVoices);
+    // Create the PlayStation SPU core.
+    // Note: only allocate a tiny amount of samples for reverb since the sampler doesn't do reverb.
+    Spu::initCore(mSpu, kSpuRamSize, kMaxVoices, 1024);
 
     // Set default volume levels
     mSpu.masterVol.left = 0x3FFF;
@@ -736,7 +730,7 @@ void PsxSampler::UpdateSpuVoicesFromParams() noexcept {
         const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
         Spu::Voice& voice = pVoices[voiceIdx];
 
-        voice.sampleRate = GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
+        voice.sampleRate = (uint16_t) GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
         voice.bDisabled = false;
         voice.bDoReverb = false;
         voice.env = adsrEnv;
@@ -764,7 +758,7 @@ void PsxSampler::UpdateSpuVoiceFromParams(const uint32_t voiceIdx) noexcept {
     const VoiceInfo& voiceInfo = mVoiceInfos[voiceIdx];
     Spu::Voice& voice = mSpu.pVoices[voiceIdx];
 
-    voice.sampleRate = GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
+    voice.sampleRate = (uint16_t) GetNoteSampleRate(baseNote, 4096.0f, (float) voiceInfo.midiNote + pitchBendInNotes);
     voice.bDisabled = false;
     voice.bDoReverb = false;
     voice.env = adsrEnv;
@@ -1055,7 +1049,7 @@ void PsxSampler::DoSaveParamsFilePrompt(IGraphics& graphics) noexcept {
     jsonDoc.SetObject();
     rapidjson::Document::AllocatorType& jsonAlloc = jsonDoc.GetAllocator();
 
-    const int32_t baseNoteF = std::round(GetParam(kParamBaseNote)->Value() * 256.0) / 256.0;    // Round to 1/256 increments
+    const double baseNoteF = std::round(GetParam(kParamBaseNote)->Value() * 256.0) / 256.0;    // Round to 1/256 increments
     const int32_t baseNote = (int32_t) baseNoteF;
     const int32_t baseNoteFrac = ((int32_t)(baseNoteF * 256.0)) % 256;
 
