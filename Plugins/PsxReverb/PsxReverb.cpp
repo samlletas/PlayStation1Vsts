@@ -20,7 +20,7 @@ PsxReverb::PsxReverb(const InstanceInfo& info) noexcept
 {
     DefinePluginParams();
     DefinePluginPresets();
-    
+
     #if IPLUG_DSP
         DoDspSetup();
     #endif
@@ -48,7 +48,7 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
 
     // Process the requested number of samples
     const int numChannels = NOutChansConnected();
-    
+
     for (int frameIdx = 0; frameIdx < numFrames; frameIdx++) {
         // Setup the SPU input sample
         if (numChannels >= 2) {
@@ -190,7 +190,7 @@ void PsxReverb::DoEditorSetup() noexcept {
     mMakeGraphicsFunc = [&]() {
         return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
     };
-    
+
     mLayoutFunc = [&](IGraphics* pGraphics) {
         pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
         pGraphics->AttachPanelBackground(COLOR_GRAY);
