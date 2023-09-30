@@ -79,6 +79,7 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::DefinePluginParams() noexcept {
+    GetParam(kPresetIdx)->InitInt("presetIdx", 0, 0, kNumPresets - 1);
     GetParam(kMasterVolL)->InitInt("masterVolL", 0, 0, 0x3FFF);
     GetParam(kMasterVolR)->InitInt("masterVolR", 0, 0, 0x3FFF);
     GetParam(kInputVolL)->InitInt("inputVolL", 0, 0, 0x7FFF);
@@ -176,7 +177,8 @@ void PsxReverb::DefinePluginPresets() noexcept {
             reverbDef.apfAddr2Left,
             reverbDef.apfAddr2Right,
             (int16_t) reverbDef.inputVolLeft,
-            (int16_t) reverbDef.inputVolRight
+            (int16_t) reverbDef.inputVolRight,
+            i
         );
     }
 }
@@ -198,6 +200,18 @@ void PsxReverb::DoEditorSetup() noexcept {
 
         IVBakedPresetManagerControl* const pPresetMgrCtrl = new IVBakedPresetManagerControl(IRECT(0.0f, 0.0f, 600.0f, 40.0f), DEFAULT_STYLE);
         pGraphics->AttachControl(pPresetMgrCtrl);
+
+        // Remember which preset was selected in previous session
+        if (int idx = GetParam(kPresetIdx)->Int(); idx > 0)
+        {
+            IVButtonControl* const pPresetNameButton = static_cast<IVButtonControl*>(GetUI()->GetControl(4));
+            WDL_String str;
+            str.SetFormatted(32, "Preset %i: %s", idx + 1, IPluginBase::GetPresetName(idx));
+            pPresetNameButton->SetLabelStr(str.Get());
+
+            // Restore preset index without changing parameter values
+            IPluginBase::SetCurrentPresetIdx(idx);
+        }
 
         const auto addHSlider = [=](const int ctrlTag, const char* const label, const float x, const float y, const float w, const float h) noexcept {
             igraphics::IVStyle style = DEFAULT_STYLE;

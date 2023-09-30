@@ -52,6 +52,7 @@ enum EParams : uint32_t {
     kAddrRAPF2,     // Reverb APF Address 2: Right
     kVolLIn,        // Reverb Input Volume: Left
     kVolRIn,        // Reverb Input Volume: Right
+    kPresetIdx,     // Reverb preset/mode index
     kNumParams
 };
 
