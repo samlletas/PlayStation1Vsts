@@ -79,14 +79,14 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::DefinePluginParams() noexcept {
-    GetParam(kMasterVolL)->InitInt("masterVolL", 0, 0, 0x3FFF);
-    GetParam(kMasterVolR)->InitInt("masterVolR", 0, 0, 0x3FFF);
-    GetParam(kInputVolL)->InitInt("inputVolL", 0, 0, 0x7FFF);
-    GetParam(kInputVolR)->InitInt("inputVolR", 0, 0, 0x7FFF);
+    GetParam(kMasterVolL)->InitInt("masterVolL", 0x3FFF, 0, 0x3FFF);
+    GetParam(kMasterVolR)->InitInt("masterVolR", 0x3FFF, 0, 0x3FFF);
+    GetParam(kInputVolL)->InitInt("inputVolL", 0x7FFF, 0, 0x7FFF);
+    GetParam(kInputVolR)->InitInt("inputVolR", 0x7FFF, 0, 0x7FFF);
     GetParam(kReverbVolL)->InitInt("reverbVolL", 0, 0, 0x7FFF);
     GetParam(kReverbVolR)->InitInt("reverbVolR", 0, 0, 0x7FFF);
 
-    GetParam(kWABaseAddr)->InitInt("revBaseAddr", 0, 0, UINT16_MAX);
+    GetParam(kWABaseAddr)->InitInt("revBaseAddr", 0xFFFF, 0, UINT16_MAX);
     GetParam(kVolLIn)->InitInt("volLIn", 0, INT16_MIN, INT16_MAX);
     GetParam(kVolRIn)->InitInt("volRIn", 0, INT16_MIN, INT16_MAX);
     GetParam(kVolIIR)->InitInt("volIIR", 0, INT16_MIN, INT16_MAX);
