@@ -80,6 +80,9 @@ private:
 
     #if IPLUG_EDITOR
         void DoEditorSetup() noexcept;
+        virtual void OnUIOpen() noexcept override;
+        virtual void OnParamChangeUI(int paramIdx, EParamSource source) noexcept override;
+        void UpdatePresetUI() noexcept;
     #endif
 
     #if IPLUG_DSP
