@@ -19,7 +19,8 @@
                 "IPLUG_EDITOR=1",
                 "IGRAPHICS_NANOVG",
                 "IGRAPHICS_METAL,",
-                "NOMINMAX"
+                "NOMINMAX",
+                "SIMPLE_SPU_FLOAT_SPU=1"
             ],
             "macFrameworkPath": [
                 "/System/Library/Frameworks",

@@ -1,0 +1,39 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build PsxReverb",
+      "options": {
+        "cwd": "${workspaceRoot}/Plugins/PsxReverb/",
+      },
+      "type": "shell",
+      "command": "msbuild.exe",
+      "args": [
+        "-p:configuration=release",
+        "-p:platform=x64",
+      ],
+      "group": {
+        "kind": "build",
+      },
+      "problemMatcher": "$msCompile",
+    },
+    {
+      "label": "build PsxSampler",
+      "options": {
+        "cwd": "${workspaceRoot}/Plugins/PsxSampler/",
+      },
+      "type": "shell",
+      "command": "msbuild.exe",
+      "args": [
+        "-p:configuration=release",
+        "-p:platform=x64",
+      ],
+      "group": {
+        "kind": "build",
+      },
+      "problemMatcher": "$msCompile",
+    }
+  ]
+}

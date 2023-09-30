@@ -14,7 +14,8 @@
             "IPLUG_DSP=1",
             "IPLUG_EDITOR=1",
             "IGRAPHICS_NANOVG",
-            "NOMINMAX"
+            "NOMINMAX",
+            "SIMPLE_SPU_FLOAT_SPU=1"
         ]
       },
     "configurations": [
