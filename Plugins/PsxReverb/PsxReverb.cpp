@@ -219,8 +219,22 @@ void PsxReverb::DoEditorSetup() noexcept {
         addHSlider(kMasterVolR, "Master R-Vol",   400,  90, 130, 40);   addTInput(kMasterVolR,  535, 110, 45, 20);
 
         pGraphics->AttachControl(
+            new IVToggleControl(
+                IRECT(600, 48, 800, 98),
+                [this](IControl* pCaller){
+                    this->mSyncSliders = (pCaller->GetValue() > 0.5);
+                },
+                "Sync L/R Sliders",
+                DEFAULT_STYLE,
+                "OFF",
+                "ON",
+                this->mSyncSliders
+            )
+        );
+
+        pGraphics->AttachControl(
             new IVButtonControl(
-                IRECT(600, 80, 800, 110),
+                IRECT(600, 108, 800, 138),
                 [this](IControl* pCaller){
                     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
                     ClearReverbWorkArea();
@@ -272,6 +286,32 @@ void PsxReverb::DoEditorSetup() noexcept {
         addHSlider(kAddrLDiff2, "DSR L-Addr 2",   595, 460, 130, 40);   addTInput(kAddrLDiff2,  730, 480, 45, 20);
         addHSlider(kAddrRDiff2, "DSR R-Addr 2",   595, 500, 130, 40);   addTInput(kAddrRDiff2,  730, 520, 45, 20);
     };
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Called when a parameter changes
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::OnParamChangeUI(int paramIdx, EParamSource source) noexcept {
+    Plugin::OnParamChangeUI(paramIdx, source);
+
+    // Sync L/R sliders
+    if (mSyncSliders && source == EParamSource::kUI) {
+        if (paramIdx == kReverbVolL) { SyncParameters(kReverbVolL, kReverbVolR); }
+        if (paramIdx == kReverbVolR) { SyncParameters(kReverbVolR, kReverbVolL); }
+        if (paramIdx == kInputVolL) { SyncParameters(kInputVolL, kInputVolR); }
+        if (paramIdx == kInputVolR) { SyncParameters(kInputVolR, kInputVolL); }
+        if (paramIdx == kMasterVolL) { SyncParameters(kMasterVolL, kMasterVolR); }
+        if (paramIdx == kMasterVolR) { SyncParameters(kMasterVolR, kMasterVolL); }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Syncs values from two parameters
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::SyncParameters(int fromIdx, int toIdx) noexcept {
+    double valueNormalized = GetParam(fromIdx)->GetNormalized();
+    SetParameterValue(toIdx, valueNormalized);                     // Update DSP
+    SendParameterValueFromDelegate(toIdx, valueNormalized, true);  // Update UI
 }
 
 #endif  // #if IPLUG_EDITOR
