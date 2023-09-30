@@ -202,18 +202,6 @@ void PsxReverb::DoEditorSetup() noexcept {
         IVBakedPresetManagerControl* const pPresetMgrCtrl = new IVBakedPresetManagerControl(IRECT(0.0f, 0.0f, 600.0f, 40.0f), DEFAULT_STYLE);
         pGraphics->AttachControl(pPresetMgrCtrl);
 
-        // Remember which preset was selected in previous session
-        if (int idx = GetParam(kPresetIdx)->Int(); idx > 0)
-        {
-            IVButtonControl* const pPresetNameButton = static_cast<IVButtonControl*>(GetUI()->GetControl(4));
-            WDL_String str;
-            str.SetFormatted(32, "Preset %i: %s", idx + 1, IPluginBase::GetPresetName(idx));
-            pPresetNameButton->SetLabelStr(str.Get());
-
-            // Restore preset index without changing parameter values
-            IPluginBase::SetCurrentPresetIdx(idx);
-        }
-
         const auto addHSlider = [=](const int ctrlTag, const char* const label, const float x, const float y, const float w, const float h) noexcept {
             igraphics::IVStyle style = DEFAULT_STYLE;
             style.showValue = false;
@@ -287,6 +275,46 @@ void PsxReverb::DoEditorSetup() noexcept {
         addHSlider(kAddrLDiff2, "DSR L-Addr 2",   595, 460, 130, 40);   addTInput(kAddrLDiff2,  730, 480, 45, 20);
         addHSlider(kAddrRDiff2, "DSR R-Addr 2",   595, 500, 130, 40);   addTInput(kAddrRDiff2,  730, 520, 45, 20);
     };
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Called when the UI opens
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::OnUIOpen() noexcept {
+    Plugin::OnUIOpen();
+
+    // Remember which preset was selected in previous session
+    UpdatePresetUI();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Called when a parameter changes
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::OnParamChangeUI(int paramIdx, EParamSource source) noexcept {
+    Plugin::OnParamChangeUI(paramIdx, source);
+
+    // If changing preset at host level then update the UI
+    if (paramIdx == kPresetIdx && source == EParamSource::kPresetRecall) {
+        UpdatePresetUI();
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Updates the preset manager control
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::UpdatePresetUI() noexcept {
+    int idx = GetParam(kPresetIdx)->Int();
+
+    if (GetUI()) {
+        // Display preset name
+        IVButtonControl* const pPresetNameButton = static_cast<IVButtonControl*>(GetUI()->GetControl(4));
+        WDL_String label;
+        label.SetFormatted(32, "Preset %i: %s", idx + 1, IPluginBase::GetPresetName(idx));
+        pPresetNameButton->SetLabelStr(label.Get());
+    }
+
+    // Restore preset index without changing parameter values
+    IPluginBase::SetCurrentPresetIdx(idx);
 }
 
 #endif  // #if IPLUG_EDITOR
