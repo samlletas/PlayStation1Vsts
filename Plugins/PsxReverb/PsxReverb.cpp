@@ -225,9 +225,9 @@ void PsxReverb::DoEditorSetup() noexcept {
             new IVButtonControl(
                 IRECT(600, 80, 800, 110),
                 [this](IControl* pCaller){
+                    SplashClickActionFunc(pCaller);
                     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
                     ClearReverbWorkArea();
-                    pCaller->OnEndAnimation();
                 },
                 "Clear Rev. Work Area",
                 DEFAULT_STYLE,
