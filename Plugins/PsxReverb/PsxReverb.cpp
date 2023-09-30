@@ -222,8 +222,22 @@ void PsxReverb::DoEditorSetup() noexcept {
         addHSlider(kMasterVolR, "Master R-Vol",   400,  90, 130, 40);   addTInput(kMasterVolR,  535, 110, 45, 20);
 
         pGraphics->AttachControl(
+            new IVToggleControl(
+                IRECT(600, 48, 800, 98),
+                [this](IControl* pCaller){
+                    this->mSyncSliders = (pCaller->GetValue() > 0.5);
+                },
+                "Sync L/R Sliders",
+                DEFAULT_STYLE,
+                "OFF",
+                "ON",
+                this->mSyncSliders
+            )
+        );
+
+        pGraphics->AttachControl(
             new IVButtonControl(
-                IRECT(600, 80, 800, 110),
+                IRECT(600, 108, 800, 138),
                 [this](IControl* pCaller){
                     SplashClickActionFunc(pCaller);
                     std::lock_guard<std::recursive_mutex> lockSpu(mSpuMutex);
@@ -297,6 +311,16 @@ void PsxReverb::OnParamChangeUI(int paramIdx, EParamSource source) noexcept {
     if (paramIdx == kPresetIdx && source == EParamSource::kPresetRecall) {
         UpdatePresetUI();
     }
+
+        // Sync L/R sliders
+    if (mSyncSliders && source == EParamSource::kUI) {
+        if (paramIdx == kReverbVolL) { SyncParameters(kReverbVolL, kReverbVolR); }
+        if (paramIdx == kReverbVolR) { SyncParameters(kReverbVolR, kReverbVolL); }
+        if (paramIdx == kInputVolL) { SyncParameters(kInputVolL, kInputVolR); }
+        if (paramIdx == kInputVolR) { SyncParameters(kInputVolR, kInputVolL); }
+        if (paramIdx == kMasterVolL) { SyncParameters(kMasterVolL, kMasterVolR); }
+        if (paramIdx == kMasterVolR) { SyncParameters(kMasterVolR, kMasterVolL); }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -315,6 +339,15 @@ void PsxReverb::UpdatePresetUI() noexcept {
 
     // Restore preset index without changing parameter values
     IPluginBase::SetCurrentPresetIdx(idx);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Syncs values from two parameters
+//------------------------------------------------------------------------------------------------------------------------------------------
+void PsxReverb::SyncParameters(int fromIdx, int toIdx) noexcept {
+    double valueNormalized = GetParam(fromIdx)->GetNormalized();
+    SetParameterValue(toIdx, valueNormalized);                     // Update DSP
+    SendParameterValueFromDelegate(toIdx, valueNormalized, true);  // Update UI
 }
 
 #endif  // #if IPLUG_EDITOR

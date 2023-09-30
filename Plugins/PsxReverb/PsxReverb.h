@@ -69,6 +69,10 @@ public:
     #endif
 
 private:
+    #if IPLUG_EDITOR
+        bool mSyncSliders = true;
+    #endif
+
     #if IPLUG_DSP
         Spu::Core               mSpu;
         std::recursive_mutex    mSpuMutex;
@@ -83,6 +87,7 @@ private:
         virtual void OnUIOpen() noexcept override;
         virtual void OnParamChangeUI(int paramIdx, EParamSource source) noexcept override;
         void UpdatePresetUI() noexcept;
+        void SyncParameters(int fromIdx, int toIdx) noexcept;
     #endif
 
     #if IPLUG_DSP
