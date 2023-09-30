@@ -7,7 +7,7 @@ Additionally (for advanced users) it is possible to program new effects. All the
 - This plugin must be run at a sample rate of 44.1 KHz for correct operation, as per the sample rate of the original PlayStation's SPU.
 
 ## Usage - Regular Options:
-- **Choose preset**: use this option to choose one of the available presets. Note: after de-serializing previously saved VST state in a DAW this chooser will appear to have no choice, even if you loaded a preset before. This is normal and does not mean the rest of your settings (or adjustments) for your chosen preset were lost. All VST state is saved, apart from this chooser.
+- **Choose preset**: use this option to choose one of the available presets. Note: In older versions of the plugin, after de-serializing previously saved VST state in a DAW this chooser will appear to have no choice, even if you loaded a preset before. This is normal and does not mean the rest of your settings (or adjustments) for your chosen preset were lost. All VST state is saved, apart from this chooser.
 - **Reverb L/R-Vol**: controls the 'depth' of the reverb effect on the left and right channels. Higher values mean more reverb added to the mix.
 - **Input L/R-Vol**: controls the volume of input passing into the reverb unit on the left and right channels. Normally you would leave this alone, but it may be useful to avoid clipping in some cases.
 - **Master L/R-Vol**: controls the volume of output (dry input + reverb) passing from the reverb unit on the left and right channels.
