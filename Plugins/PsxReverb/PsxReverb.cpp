@@ -79,7 +79,6 @@ void PsxReverb::ProcessBlock(sample** pInputs, sample** pOutputs, int numFrames)
 // Defines the parameters used by the plugin
 //------------------------------------------------------------------------------------------------------------------------------------------
 void PsxReverb::DefinePluginParams() noexcept {
-    GetParam(kPresetIdx)->InitInt("presetIdx", 0, 0, kNumPresets - 1, "", IParam::kFlagCannotAutomate);
     GetParam(kMasterVolL)->InitInt("masterVolL", 0, 0, 0x3FFF);
     GetParam(kMasterVolR)->InitInt("masterVolR", 0, 0, 0x3FFF);
     GetParam(kInputVolL)->InitInt("inputVolL", 0, 0, 0x7FFF);
@@ -123,6 +122,8 @@ void PsxReverb::DefinePluginParams() noexcept {
     GetParam(kAddrRDiff1)->InitInt("addrRDiff1", 0, 0, UINT16_MAX);
     GetParam(kAddrLDiff2)->InitInt("addrLDiff2", 0, 0, UINT16_MAX);
     GetParam(kAddrRDiff2)->InitInt("addrRDiff2", 0, 0, UINT16_MAX);
+
+    GetParam(kPresetIdx)->InitInt("presetIdx", 0, 0, kNumPresets - 1, "", IParam::kFlagCannotAutomate);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
